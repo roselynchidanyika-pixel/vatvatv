@@ -41,8 +41,7 @@ def build_markdown_report(result, git_url="", streamlit_url=""):
     lines.append(f"**Generated:** {datetime.now().strftime('%d %B %Y %H:%M')}  ")
     lines.append(f"**System:** Explainable Zimbabwe VAT 7 Return Assistant")
     lines.append("")
-    lines.append("> DEMO / SIMULATED DATA — NOT REAL TAXPAYER DATA. ")
-    lines.append(config.DISCLAIMER)
+    lines.append("> " + config.VAT_DEFINITION.replace("\n", " ").replace("**", ""))
     lines.append("")
 
     # -- Executive Summary -----------------------------------------------
@@ -253,5 +252,5 @@ def share_text(result):
     lines.append("")
     lines.append("ZIMRA rule applied: USD and ZiG schedules are kept separate "
                  "and never mixed.")
-    lines.append(config.DISCLAIMER)
+    lines.append("— " + config.VAT_DEFINITION.replace("\n", " ").replace("**", ""))
     return "\n".join(lines)

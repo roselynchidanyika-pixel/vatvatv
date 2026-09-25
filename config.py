@@ -124,9 +124,9 @@ REFERENCES = [
      "https://www.zimra.co.zw/domestic-taxes/vat/mechanics-of-vat"),
 ]
 
-DISCLAIMER = ("EDUCATIONAL / DEMONSTRATION SYSTEM ONLY. This application is a "
-              "university Financial Engineering project and does not replace "
-              "professional tax advice, ZIMRA filing systems (TaRMS) or the "
-              "primary law. All data is simulated; no real taxpayer data is "
-              "used. Verify every rule and figure against the current ZIMRA "
-              "publications before relying on it.")
+VAT_DEFINITION = ("**VAT (Value Added Tax)** is a consumption tax charged on the "
+                  "supply of goods and services. A registered business adds VAT "
+                  "to its selling prices (output VAT) and deducts the VAT it paid "
+                  "on its purchases (input VAT). The business simply collects the "
+                  "difference on behalf of the government; the final consumer "
+                  "ultimately bears the tax.")

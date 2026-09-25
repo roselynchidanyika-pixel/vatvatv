@@ -68,6 +68,32 @@ CSS = """
 .kpi { border:1px solid #D6E0EA; border-radius:12px; padding:12px 14px;
   background:#fff; box-shadow:0 1px 3px rgba(18,49,94,.08); }
 .ghost { color:#607B96; font-size:13px; }
+.hero { border-radius:16px; padding:22px 26px; color:#fff;
+  background:linear-gradient(120deg,#0D2A52 0%,#1565C0 55%,#1E88E5 100%);
+  box-shadow:0 6px 18px rgba(18,49,94,.25); margin:6px 0 18px 0; }
+.hero .big { font-size:34px; font-weight:800; line-height:1.15; }
+.hero .sub { font-size:14px; opacity:.92; margin-top:4px; }
+.pillstatus { display:inline-block; padding:5px 14px; border-radius:999px;
+  font-weight:700; font-size:13px; margin-left:8px; }
+.pill-b { background:#FFE082; color:#4E3500; }
+.pill-g { background:#C8E6C9; color:#1B5E20; }
+.pill-o { background:#FFE0B2; color:#BF360C; }
+.tile { background:#fff; border-radius:14px; padding:16px 16px 12px 16px;
+  box-shadow:0 2px 8px rgba(18,49,94,.10); border-top:5px solid #1565C0;
+  height:100%; }
+.tile.grn { border-top-color:#43A047; } .tile.org { border-top-color:#FB8C00; }
+.tile.red { border-top-color:#E53935; } .tile.gld { border-top-color:#F9A825; }
+.tile .lbl { color:#5A6B7E; font-size:12px; font-weight:700; letter-spacing:.4px;
+  text-transform:uppercase; }
+.tile .num { font-size:24px; font-weight:800; color:#12315E; margin-top:4px; }
+.tile .foot { font-size:12px; color:#8AA0B6; margin-top:4px; }
+.workbox { border-radius:12px; padding:12px 16px; margin:8px 0 14px 0;
+  background:#F4F8FD; border:1px solid #CDE0F3; }
+.workbox h4 { margin:0 0 4px 0; color:#12315E; }
+.formula { background:#12315E; color:#fff; border-radius:10px; padding:10px 16px;
+  font-size:15px; font-weight:600; margin:6px 0; }
+.formula .hi { color:#FFD54F; }
+.hint { color:#5A6B7E; font-size:13px; }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -154,6 +180,31 @@ def st_status(status):
     return {"PASS": "🟢 PASS", "REVIEW": "🟠 REVIEW", "FAIL": "🔴 FAIL"}.get(status, status)
 
 
+CATEGORY_GUIDE = [
+    ("standard", "Standard-rated — VAT is charged at 15.5% on the supply."),
+    ("zero_rated", "Zero-rated — VAT at 0%; input VAT on related costs is still claimable."),
+    ("exempt", "Exempt — no VAT charged, and input VAT on costs linked to it is generally not claimable."),
+    ("export", "Export — zero-rated (0%) once proof of export is held."),
+    ("import_goods", "Imported goods — VAT charged at customs on value + duty; claimable as input."),
+    ("imported_service", "Imported service — reverse-charged (output + mirror input)."),
+]
+CATEGORY_GUIDE_DICT = dict(CATEGORY_GUIDE)
+
+
+def category_legend():
+    st.markdown(
+        "<div class='rule-box'><b>Which supply type is it? (exempt / standard / "
+        "zero-rated)</b><br>" +
+        "<br>".join(f"• <b>{k}</b> — {v}" for k, v in CATEGORY_GUIDE) +
+        "</div>", unsafe_allow_html=True)
+
+
+def vat_definition_box():
+    st.markdown(
+        "<div class='workbox'><h4>💡 What is VAT?</h4>" + config.VAT_DEFINITION +
+        "</div>", unsafe_allow_html=True)
+
+
 def read_uploaded(uploaded):
     name = (uploaded.name or "").lower()
     try:
@@ -192,56 +243,123 @@ def render_schedule(ccy):
         "other currency schedule (ZIMRA requirement).")
 
 
+def _work_rows(t, side=None, categories=None):
+    m = t
+    if side:
+        m = m[m["side"] == side]
+    if categories:
+        m = m[m["category"].isin(categories)]
+    if m.empty:
+        return pd.DataFrame()
+    return m[["txn_id", "description", "category", "vat_math", "vat_amount"]].copy()
+
+
+def _detail_table(m, L):
+    if m.empty:
+        st.caption("No transactions feed this line.")
+        return
+    view = m.copy()
+    view["vat_amount"] = view["vat_amount"].map(lambda v: f"{float(v):,.2f}")
+    view["category"] = view["category"].map(
+        lambda c: f"{c} — {CATEGORY_GUIDE_DICT.get(c, '')}")
+    st.dataframe(view.rename(columns={"txn_id": "Txn", "description": "Description",
+                                      "category": "Category", "vat_math": "VAT calculation",
+                                      "vat_amount": f"VAT ({L})"}),
+                 hide_index=True, use_container_width=True)
+
+
+def _step(title, hint):
+    st.markdown(
+        f"<div class='workbox'><h4>{title}</h4>"
+        f"<span class='hint'>{hint}</span></div>", unsafe_allow_html=True)
+
+
+def _formula(expr, answer, note=""):
+    st.markdown(
+        f"<div class='formula'>{expr} = <span class='hi'>{answer}</span>"
+        f"{(' · ' + note) if note else ''}</div>", unsafe_allow_html=True)
+
+
 def show_workings(res):
-    st.subheader("🧮 Show All Workings — every number you can see")
+    st.subheader("🧮 Show All Workings — every schedule line traced to transactions")
     labels = {"ZIG": "ZiG", "USD": "USD"}
     for ccy, sched in res.schedules.items():
         L = labels.get(ccy, ccy)
-        st.markdown(f"##### {ccy} schedule")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**STEP 1 — SALES**")
-            st.dataframe(pd.DataFrame({
-                "Category": ["Standard-rated", "Zero-rated", "Exempt", "TOTAL"],
-                f"Value ({L})": [float(sched.std), float(sched.zr), float(sched.ex),
-                                 float(sched.sales_value)]}), hide_index=True,
-                use_container_width=True)
-        with c2:
-            st.markdown("**STEP 2 — OUTPUT VAT**")
+        t = res.trail[res.trail["schedule"] == ccy]
+
+        st.markdown(f"#### {ccy} schedule ({L}), filed separately")
+        _step("STEP 1 — Sales: what kind of supply is it? (line 1)",
+              "Each sale falls into one supply category. The category decides the "
+              "VAT treatment: standard, zero-rated or exempt.")
+        c1, c2, c3 = st.columns(3)
+        c1.markdown(f"<div class='tile'><div class='lbl'>Standard-rated</div>"
+                    f"<div class='num'>{float(sched.std):,.2f} {L}</div>"
+                    f"<div class='foot'>VAT charged at 15.5%.</div></div>",
+                    unsafe_allow_html=True)
+        c2.markdown(f"<div class='tile grn'><div class='lbl'>Zero-rated</div>"
+                    f"<div class='num'>{float(sched.zr):,.2f} {L}</div>"
+                    f"<div class='foot'>0% VAT — input VAT still claimable.</div></div>",
+                    unsafe_allow_html=True)
+        c3.markdown(f"<div class='tile org'><div class='lbl'>Exempt</div>"
+                    f"<div class='num'>{float(sched.ex):,.2f} {L}</div>"
+                    f"<div class='foot'>No VAT — input VAT generally not claimable.</div></div>",
+                    unsafe_allow_html=True)
+        _formula("Line 1 (total sales) = Standard + Zero-rated + Exempt",
+                 f"{float(sched.sales_value):,.2f} {L}")
+
+        _step("STEP 2 — Output VAT: VAT the business charges on sales (lines 2–4 → line 5)",
+              "Output VAT is collected from customers and paid to ZIMRA.")
+        _formula("Line 2 (output tax on standard sales) = Standard sale value × 15.5%",
+                 f"{float(sched.out_std):,.2f} {L}")
+        _detail_table(_work_rows(t, side="Output", categories=["standard"]), L)
+        _formula("Line 3 (adjustments) = credit notes (−) + debit notes (+) + bad-debt relief (−)",
+                 f"{float(sched.out_adj):,.2f} {L}")
+        _detail_table(_work_rows(t, side="Adjustment"), L)
+        _formula("Line 4 (reverse charge, imported services) = Service value × 15.5%",
+                 f"{float(sched.rc_out):,.2f} {L}")
+        _detail_table(_work_rows(t, side="Output", categories=["imported_service"]), L)
+        _formula("Line 5 (total output tax) = Line 2 + Line 3 + Line 4",
+                 f"{float(sched.total_output):,.2f} {L}")
+
+        _step("STEP 3 — Input VAT: VAT the business paid and can deduct (lines 6–9 → line 10)",
+              "Input VAT is deducted from output VAT before paying the net amount.")
+        _formula("Line 6 (local purchases) = Σ Purchase VAT × business-use %",
+                 f"{float(sched.in_local):,.2f} {L}")
+        _detail_table(_work_rows(t, side="Input", categories=["standard"]), L)
+        _formula("Line 7 (imports of goods) = Σ (Customs value + duty) × 15.5%",
+                 f"{float(sched.in_import):,.2f} {L}")
+        _detail_table(_work_rows(t, side="Input", categories=["import_goods"]), L)
+        _formula("Line 8 (reverse-charge mirror input) = Σ Mirror credit",
+                 f"{float(sched.rc_in):,.2f} {L}")
+        _detail_table(_work_rows(t, side="Input", categories=["imported_service"]), L)
+        mixed_rows = _work_rows(t, side="Input", categories=["mixed"])
+        if not mixed_rows.empty:
             st.markdown(
-                f"- Standard rated: {float(sched.out_std):,.2f}\n"
-                f"- Adjustments (line 3): {float(sched.out_adj):,.2f}\n"
-                f"- Reverse charge (line 4): {float(sched.rc_out):,.2f}\n"
-                f"- **Total output tax = {float(sched.total_output):,.2f} {L}**")
-        c3, c4 = st.columns(2)
-        with c3:
-            st.markdown("**STEP 3 — PURCHASES / INPUTS**")
-            st.markdown(
-                f"- Local purchases (line 6): {float(sched.in_local):,.2f}\n"
-                f"- Imports of goods (line 7): {float(sched.in_import):,.2f}\n"
-                f"- Reverse charge input (line 8): {float(sched.rc_in):,.2f}\n"
-                f"- Mixed recovered after apportionment: "
-                f"{float(sched.mixed_deductible):,.2f}\n"
-                f"- Apportionment disallowed (line 9): "
-                f"{float(sched.disallowed):,.2f}")
-        with c4:
-            st.markdown("**STEP 4 — INPUT VAT**")
-            formula = (f"{float(sched.total_output):,.2f} − "
-                       f"{float(sched.total_input):,.2f}")
-            st.markdown(
-                f"- **Total input tax allowable (line 10) = "
-                f"{float(sched.total_input):,.2f} {L}**\n"
-                f"- **STEP 5 — FINAL: Output − Input = {formula} "
-                f"= {float(sched.net):,.2f} {L} ({sched.status})**")
-    st.markdown("**STEP 6 — ADJUSTMENTS TRANSACTIONS**")
-    adj = res.trail[res.trail["side"] == "Adjustment"][
-        ["txn_id", "date", "description", "schedule", "vat_rate", "vat_amount",
-         "vat_math"]]
-    st.dataframe(adj, hide_index=True, use_container_width=True)
+                "**Mixed (overhead) inputs** — held for apportionment: "
+                f"recovered {float(sched.mixed_deductible):,.2f} {L}, "
+                f"disallowed (line 9) {float(sched.disallowed):,.2f} {L}. "
+                "Prohibited inputs (entertainment, passenger cars, clubs) are "
+                "excluded — claim = 0.")
+            _detail_table(mixed_rows, L)
+        prohib = _work_rows(t, side="Input", categories=["prohibited"])
+        if not prohib.empty:
+            st.caption("Excluded traces (input VAT legally blocked, claim = 0):")
+            _detail_table(prohib, L)
+        _formula("Line 10 (total allowable input tax) = L6 + L7 + L8 + mixed recovered − L9",
+                 f"{float(sched.total_input):,.2f} {L}")
+
+        _step("STEP 4 — THE FINAL ANSWER", "Net VAT is output tax minus input tax.")
+        _formula(f"Line 11 = Line 5 − Line 10 = {float(sched.total_output):,.2f} − "
+                 f"{float(sched.total_input):,.2f}",
+                 f"{float(sched.net):,.2f} {L} ({sched.status})")
+        st.markdown(f"**Line 13 = |Line 11| = {abs(float(sched.net)):,.2f} {L}** "
+                    "— the VAT due for the period.")
+        st.divider()
+
     st.markdown(
-        "> <b>FORMULA</b>  Output VAT − Allowable Input VAT ± Adjustments = Net "
-        "VAT position. Every figure above is traced to individual transactions "
-        "in the Audit Trail below.")
+        "> <b>MASTER FORMULA:</b> Output VAT − Allowable Input VAT ± Adjustments = "
+        "Net VAT position. Every figure above is traced to individual "
+        "transactions in the Audit Trail below.")
 
 
 def show_audit(res):
@@ -297,52 +415,110 @@ def page_dashboard():
     res = st.session_state.get("result")
     df = get_working_df()
     snap = st.session_state.get("fx") or load_fx()
+    period = period_label(df)
 
-    st.subheader("🏠 VAT Return Dashboard")
-    st.caption(f"Filing view: **{period_label(df)}** · live exchange rates below "
-               f"· source {snap.get('source')} · as at {snap.get('date_label')}")
+    if res:
+        status = res.status
+        if status == "PAYABLE":
+            pill, word = "pill-b", "VAT payable to ZIMRA"
+        elif status == "REFUNDABLE":
+            pill, word = "pill-g", "VAT refundable / held as a credit"
+        else:
+            pill, word = "pill-o", "Nil VAT position"
+        chips = " ".join(
+            f"<span class='pillstatus {pill}'>{ccy}: {float(s.net):,.2f} · "
+            f"{s.status}</span>" for ccy, s in res.schedules.items())
+        hero = (f"<div class='hero'><div class='sub'>ZIMBABWE VAT 7 · {period} · "
+                f"{res.counts['n_txns']} transactions</div>"
+                f"<div class='big'>Net VAT {res.net_vat:,.2f}</div>"
+                f"<div class='sub'><span class='pillstatus {pill}'>{word}</span>"
+                f"&nbsp; ZiG and USD schedules are computed separately</div>"
+                f"<div class='sub' style='margin-top:10px'>{chips}</div></div>")
+    else:
+        hero = (f"<div class='hero'><div class='sub'>ZIMBABWE VALUE ADDED TAX · "
+                f"RETURN AUTOMATION</div><div class='big'>Your VAT 7, explained "
+                f"end-to-end</div><div class='sub'>Load demo data, upload a "
+                f"file, or enter transactions manually — then compute the return "
+                f"and watch every number being built.</div></div>")
+    st.markdown(hero, unsafe_allow_html=True)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Transactions", (res.counts["n_txns"] if res else len(df)),
-              "in current dataset")
-    c2.metric("Output VAT", f"{res.total_output_tax:,.2f}" if res else "—",
-              "charged on sales")
-    c3.metric("Input VAT", f"{res.total_input_tax:,.2f}" if res else "—",
-              "allowable")
-    c4.metric("Net VAT", f"{res.net_vat:,.2f} · {res.status}" if res else "—",
-              "payable / refundable")
-    c5.metric("Compliance", f"{res.counts['n_pass']} ✅ · "
-                            f"{res.counts['n_review']} 🟠 · "
-                            f"{res.counts['n_fail']} ❌" if res else "—",
-              "PASS / REVIEW / FAIL")
+    ntx = res.counts["n_txns"] if res else len(df)
+    outv = f"{res.total_output_tax:,.0f}" if res else "—"
+    inv_ = f"{res.total_input_tax:,.0f}" if res else "—"
+    netv = f"{res.net_vat:,.0f}" if res else "—"
+    netsts = res.status if res else "payable / refundable"
+    tile4 = ("org" if res and res.status == "PAYABLE"
+             else ("grn" if res and res.status == "REFUNDABLE" else "gld"))
+    comp = ("✅" + str(res.counts["n_pass"]) + " 🟠" + str(res.counts["n_review"])
+            + " ❌" + str(res.counts["n_fail"])) if res else "—"
+    c1.markdown(f"<div class='tile gld'><div class='lbl'>Transactions</div>"
+                f"<div class='num'>{ntx}</div>"
+                f"<div class='foot'>in the working dataset</div></div>",
+                unsafe_allow_html=True)
+    c2.markdown(f"<div class='tile'><div class='lbl'>Output VAT</div>"
+                f"<div class='num'>{outv}</div>"
+                f"<div class='foot'>charged on sales</div></div>",
+                unsafe_allow_html=True)
+    c3.markdown(f"<div class='tile grn'><div class='lbl'>Input VAT</div>"
+                f"<div class='num'>{inv_}</div>"
+                f"<div class='foot'>allowable deduction</div></div>",
+                unsafe_allow_html=True)
+    c4.markdown(f"<div class='tile {tile4}'><div class='lbl'>Net VAT</div>"
+                f"<div class='num'>{netv}</div>"
+                f"<div class='foot'>{netsts}</div></div>",
+                unsafe_allow_html=True)
+    c5.markdown(f"<div class='tile gld'><div class='lbl'>Compliance</div>"
+                f"<div class='num'>{comp}</div>"
+                f"<div class='foot'>PASS · REVIEW · FAIL</div></div>",
+        unsafe_allow_html=True)
 
-    q1, q2, q3 = st.columns(3)
-    with q1:
-        if st.button("🧪 Load Demo Data (Tri-Currency)", use_container_width=True):
+    left, right = st.columns([3, 2])
+    with left:
+        st.markdown("#### 📋 Schedules at a glance")
+        if res:
+            for ccy, s in res.schedules.items():
+                lcolx, rcolx = st.columns([4, 1])
+                lcolx.markdown(
+                    f"<div class='workbox'><b>{ccy} schedule</b> — net "
+                    f"<span style='font-size:18px;font-weight:800;color:#12315E'>"
+                    f"{float(s.net):,.2f}</span> {ccy} · <b>{s.status}</b><br>"
+                    f"<span class='hint'>Output {float(s.total_output):,.2f} − "
+                    f"Input {float(s.total_input):,.2f} · filed separately "
+                    f"(ZIMRA rule, never mixed)</span></div>",
+                    unsafe_allow_html=True)
+                with rcolx:
+                    if st.button("Open", key=f"open_{ccy}"):
+                        st.session_state.menu = "🧮 VAT Return"
+                        st.rerun()
+        else:
+            st.info("No schedule yet — load data and click **Compute**.")
+    with right:
+        st.markdown("#### 🚀 Actions")
+        if st.button("🧪 Load demo data (Tri-Currency)", use_container_width=True):
             st.session_state.base_df = sample_data.load_sample(
                 "Tri-Currency Traders (mixed USD+ZiG+ZAR)")
             st.session_state.pop("result", None)
             st.rerun()
-    with q2:
-        if st.button("✍️ Enter Transactions Manually", use_container_width=True):
+        if st.button("✍️ Enter transactions manually", use_container_width=True):
             st.session_state.menu = "📥 Data & Validation"
             st.rerun()
-    with q3:
-        if st.button("🧮 Compute VAT Return", use_container_width=True,
-                     disabled=df.empty):
+        if st.button("🧮 Compute the VAT return", use_container_width=True,
+                     type="primary", disabled=df.empty):
             run_compute()
             st.session_state.menu = "🧮 VAT Return"
             st.rerun()
+        st.caption(f"{len(df)} transaction(s) in the working dataset"
+                   f"{'.' if len(df) else ' — add some first.'}")
 
-    st.markdown("### 💱 Currency & Exchange Rates used")
-    st.dataframe(pd.DataFrame(fx.rates_table(snap)), hide_index=True,
-                 use_container_width=True)
-    st.caption("Rates are quoted per 1 USD. The rate actually applied to a "
-               "transaction, its source and its date are also shown on every "
-               "row of the Audit Trail.")
+    with st.expander("💱 Exchange rates used (quoted per 1 USD)"):
+        st.dataframe(pd.DataFrame(fx.rates_table(snap)), hide_index=True,
+                     use_container_width=True)
+        st.caption("The rate actually applied to a transaction — its source and "
+                   "date — is shown on every row of the Audit Trail.")
 
     if res is not None:
-        st.markdown("### 📋 Draft VAT 7 schedules (per currency, never mixed)")
+        st.markdown("#### 📋 Draft VAT 7 schedules (per currency, never mixed)")
         tabs = st.tabs(["ZiG schedule"] if "ZIG" in res.schedules else [] +
                        (["USD schedule"] if "USD" in res.schedules else []))
         for tab, ccy in zip(tabs, ("ZIG", "USD")):
@@ -382,7 +558,8 @@ def page_data():
         st.radio("Choose sample dataset", list(sample_data.SAMPLE_FILES.keys()),
                  key="demo_key", horizontal=True)
         st.info(sample_data.SAMPLE_DESCRIPTIONS.get(
-            st.session_state.demo_key, ""))
+            st.session_state.get("demo_key", list(sample_data.SAMPLE_FILES)[0]),
+            ""))
         if st.button("📥 Load this demo dataset", type="primary"):
             st.session_state.base_df = sample_data.load_sample(
                 st.session_state.demo_key)
@@ -431,7 +608,13 @@ def page_data():
             with c4:
                 m_cat = st.selectbox("VAT category",
                                      ["standard", "zero_rated", "exempt",
-                                      "export"])
+                                      "export"],
+                                     help="standard = 15.5% VAT · zero_rated = "
+                                          "0% (input still claimable) · exempt = "
+                                          "no VAT, input generally not claimable")
+                st.caption("standard = VAT at 15.5% · zero_rated = 0% (input "
+                           "still claimable) · exempt = no VAT, input generally "
+                           "not claimable")
                 m_cv = st.number_input("Customs value (imports)", value=0.0)
                 m_cd = st.number_input("Customs duty (imports)", value=0.0)
             with c5:
@@ -546,6 +729,7 @@ def page_return():
             run_compute()
         return
     st.subheader("📋 VAT Return — the schedules you file (never mixed)")
+    category_legend()
     tabs = st.tabs([f"{ccy} schedule" for ccy in res.schedules])
     for tab, ccy in zip(tabs, res.schedules):
         with tab:
@@ -729,7 +913,7 @@ def page_assumptions():
     for ref, desc, url in config.REFERENCES:
         st.markdown(f"- **{ref}** — {desc}  \n  {url}")
     st.divider()
-    st.info(config.DISCLAIMER)
+    vat_definition_box()
 
 
 def ve_assumptions_text():
@@ -768,25 +952,23 @@ def page_tests():
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 💱 Live Exchange Rate")
+    st.markdown("### 💱 Currency Converter")
     snap = st.session_state.get("fx") or load_fx()
     r = snap["rates"]
-    usd_zig = fx.convert(1, "USD", "ZIG", r)
-    zar_zig = fx.convert(1, "ZAR", "ZIG", r)
+    c_from = st.selectbox("From", ("USD", "ZIG", "ZAR"), index=0)
+    c_to = st.selectbox("To", ("ZIG", "USD", "ZAR"), index=1)
+    famt = st.number_input("Amount", value=1000.0, min_value=0.0, step=100.0)
+    rate = fx.convert(1, c_from, c_to, r)
+    converted = fx.convert(famt, c_from, c_to, r)
     st.markdown(
-        f"<span class='pill'><b>1 USD = {usd_zig:,.4f} ZiG</b></span> "
-        f"<span class='pill'><b>1 ZAR = {zar_zig:,.4f} ZiG</b></span>",
+        f"<div class='workbox'><b>1 {c_from} = {rate:,.4f} {c_to}</b><br>"
+        f"<span style='font-size:20px;font-weight:700;color:#12315E'>"
+        f"{famt:,.2f} {c_from} → {converted:,.2f} {c_to}</span></div>",
         unsafe_allow_html=True)
-    st.caption(f"{(snap['source'])} · as at {snap['date_label']} "
-               f"({'🟢 LIVE' if snap.get('live') else '🟠 cached/offline'})")
-    if not snap.get("live"):
-        st.warning("Not live — using cached/fallback rates. Click Refresh.")
-    manual_zig = st.number_input("Manual RBZ official ZiG rate (0 = auto)",
-                                 value=0.0, step=0.01,
-                                 help="Enter the current RBZ official rate to "
-                                      "override the live feed (e.g. 26.63).")
-    if st.button("🔃 Refresh/apply rates", use_container_width=True):
-        load_fx(refresh=True, manual_zig=manual_zig or None)
+    st.caption(f"{snap['source']} · as at {snap['date_label']}"
+               + (" · live" if snap.get("live") else " · cached"))
+    if st.button("🔃 Refresh rates", use_container_width=True):
+        load_fx(refresh=True)
         st.rerun()
 
     st.markdown("### ⚙️ Options")
@@ -832,8 +1014,6 @@ elif menu == "⚙️ Assumptions & Sources":
 elif menu == "🧪 Test Cases":
     page_tests()
 
-st.markdown("---")
-st.caption("ZIMBABWE VAT RETURN AUTOMATION & EXPLAINABLE VAT SYSTEM — DEMO/SIMULATED "
-           "DATA ONLY — NO REAL TAXPAYER DATA. Educational project; does not "
-           "replace professional tax advice or ZIMRA TaRMS filing. " +
-           config.DISCLAIMER)
+vat_definition_box()
+st.caption("Zimbabwe VAT Return Automation & Explainable VAT System — LEARN → ENTER → "
+           "CHECK → CONVERT → CALCULATE → EXPLAIN → VISUALISE → AUDIT → REPORT.")
