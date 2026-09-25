@@ -1,9 +1,2 @@
-__pycache__/
-*.py[cod]
-.env
-.streamlit/secrets.toml
-.fx_rates_cache.json
-.pytest_cache/
-.venv/
-venv/
-*.log
+# Created by pytest automatically.
+*

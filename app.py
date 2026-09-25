@@ -37,17 +37,6 @@ st.set_page_config(page_title="Zimbabwe VAT Return Assistant", page_icon="🇿�
 # ---------------------------------------------------------------------------
 # Branding
 # ---------------------------------------------------------------------------
-LOGO_SVG = (
-    "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'>"
-    "<circle cx='45' cy='45' r='44' fill='#12315E'/>"
-    "<circle cx='45' cy='45' r='38' fill='#F2B705'/>"
-    "<circle cx='45' cy='45' r='38' fill='none' stroke='#0D2A52' stroke-width='3'/>"
-    "<g fill='#12315E'><circle cx='31' cy='33' r='10'/><circle cx='59' cy='33' r='10'/>"
-    "<rect x='31' y='45' width='28' height='13'/></g>"
-    "</svg>"
-)
-LOGO_DATA_URI = "data:image/svg+xml;utf8," + LOGO_SVG.replace(" ", "%20").replace("#", "%23")
-
 CSS = """
 <style>
 .brand { display:flex; align-items:center; gap:16px; padding:8px 4px 4px 4px; }
@@ -111,7 +100,7 @@ CSS = """
 st.markdown(CSS, unsafe_allow_html=True)
 
 st.markdown(
-    f"<div class='brand'><img src='{LOGO_DATA_URI}' width='90' height='90'>"
+    f"<div class='brand'>"
     f"<div><div class='brand-title'>🇿🇼 ZIMBABWE VAT RETURN AUTOMATION SYSTEM</div>"
     f"<div class='brand-sub'>Explain • Calculate • Validate • Visualise • Audit — "
     f"VAT 7 Return Assistant (multi-currency, explained, auditable)</div></div></div>",
