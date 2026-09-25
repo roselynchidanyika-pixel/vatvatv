@@ -151,4 +151,17 @@ SAMPLE_DESCRIPTIONS = {
 
 
 def load_sample(name):
-    return pd.read_csv(io.StringIO(SAMPLE_FILES[name]))
+    """Return a DataFrame for one of the embedded demo datasets.
+
+    Raises a helpful KeyError (never a crash) if the requested name is unknown
+    or the dataset is missing/incomplete.
+    """
+    try:
+        return pd.read_csv(io.StringIO(SAMPLE_FILES[name]))
+    except KeyError as exc:
+        keys = ", ".join(repr(k) for k in SAMPLE_FILES)
+        raise KeyError(
+            f"Unknown sample dataset {name!r}. Available: {keys}") from None
+    except Exception as exc:
+        raise ValueError(
+            f"Sample dataset {name!r} could not be parsed: {exc}") from exc

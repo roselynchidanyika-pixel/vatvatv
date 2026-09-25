@@ -910,9 +910,14 @@ with st.sidebar:
     if src_choice.startswith("📄"):
         key = MAIN_SAMPLES[0] if src_choice.endswith("Harare Traders") else MAIN_SAMPLES[1]
         if st.session_state.get("src_key") != key:
-            st.session_state.base_df = sample_data.load_sample(key)
+            try:
+                dfx = sample_data.load_sample(key)
+            except (KeyError, ValueError) as exc:
+                st.error(f"Sample dataset could not be loaded: {exc}")
+                st.stop()
+            st.session_state.base_df = dfx
             st.session_state.src_key = key
-            st.session_state.src_label = sample_data.SAMPLE_NAMES[key]
+            st.session_state.src_label = sample_data.SAMPLE_NAMES.get(key, key)
             st.session_state.pop("result", None)
             st.session_state.pop("checks", None)
     else:
@@ -937,9 +942,14 @@ with st.sidebar:
         st.radio("Load", OTHER_SAMPLES, key="other_demo")
         if st.button("Load selected"):
             key2 = st.session_state.other_demo
-            st.session_state.base_df = sample_data.load_sample(key2)
+            try:
+                dfx = sample_data.load_sample(key2)
+            except (KeyError, ValueError) as exc:
+                st.error(f"Sample dataset could not be loaded: {exc}")
+                st.stop()
+            st.session_state.base_df = dfx
             st.session_state.src_key = key2
-            st.session_state.src_label = sample_data.SAMPLE_NAMES[key2]
+            st.session_state.src_label = sample_data.SAMPLE_NAMES.get(key2, key2)
             st.session_state.pop("result", None)
             st.session_state.pop("checks", None)
 
