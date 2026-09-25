@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import datetime as _dt
 import io
+import json as _json
 import pathlib
 import re as _re
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import config
 import exchange_rates as fx
@@ -112,6 +114,151 @@ st.markdown(
     "at the applicable exchange rate. Every conversion shows its rate, source "
     "and date.</div>",
     unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Robot welcome — speaks automatically as soon as the agent loads
+# ---------------------------------------------------------------------------
+ROBOT_WELCOME = (
+    "Welcome to the Zimbabwe VAT Return System. "
+    "I will guide you through the VAT process step by step. "
+    "One — we enter or upload your transaction data. "
+    "Two — I check the transactions, currencies, VAT categories and "
+    "supporting information. "
+    "Three — I show you the exchange rate being used for ZiG, USD and ZAR "
+    "transactions. "
+    "Four — I calculate output VAT, allowable input VAT, imports and "
+    "adjustments. "
+    "Five — I show you every calculation, including the formula and the "
+    "numbers used. "
+    "Six — I check each transaction and show you PASS, FAIL or REVIEW, with "
+    "an explanation. "
+    "Seven — I create graphs and explain what each graph means in simple "
+    "English. "
+    "Eight — I show you the complete VAT return and the full audit trail. "
+    "You do not need to be a VAT expert. I will explain what is happening, "
+    "why it is happening, and how each number was calculated. "
+    "Welcome to the ZIMRA VAT Return System. Let us begin.")
+
+
+def robot_welcome():
+    """A speech-bubble robot that reads the welcome message out loud.
+
+    Uses the browser's built-in speech synthesis (no API key, works offline).
+    Speaks automatically when the component mounts; browsers that block
+    auto-audio start speaking on the first click/key press instead. The bubble
+    can be replayed, muted or closed.
+    """
+    text_json = _json.dumps(ROBOT_WELCOME)
+    safe_text = _re.sub(r"<[^>]+>", "", ROBOT_WELCOME)
+    html = f"""
+<div id='robotCard' style='max-width:880px;margin:10px 0 4px 0'>
+  <div class='top'>
+    <span class='title'>🤖 ROBOT VAT ASSISTANT</span>
+    <div class='btns'>
+      <button id='mute' title='Mute / unmute'>🔇</button>
+      <button id='play' title='Replay the welcome'>🔊</button>
+      <button id='close' title='Close'>✕</button>
+    </div>
+  </div>
+  <div class='bubble' data-text='{text_json}'></div>
+  <div id='status'></div>
+</div>
+<style>
+ * {{ box-sizing:border-box; font-family:'Segoe UI',Arial,sans-serif; }}
+ #robotCard {{ border:2px solid #1565C0; border-radius:14px;
+   background:linear-gradient(120deg,#0D2A52 0%,#1565C0 100%); color:#fff;
+   padding:14px 16px; box-shadow:0 6px 16px rgba(18,49,94,.28); }}
+ .top {{ display:flex; align-items:center; justify-content:space-between;
+   margin-bottom:8px; }}
+ .title {{ font-weight:800; font-size:16px; letter-spacing:.3px; }}
+ .btns button {{ background:#fff; border:none; border-radius:8px; cursor:pointer;
+   font-size:14px; padding:5px 10px; margin-left:6px; }}
+ .btns button:hover {{ background:#FFE082; }}
+ .bubble {{ background:#fff; color:#12315E; border-radius:12px; padding:12px 14px;
+   font-size:14.5px; line-height:1.6; max-height:150px; overflow-y:auto;
+   border-left:6px solid #F2B705; white-space:pre-line; }}
+ .bubble.speaking {{ border-left-color:#43A047; background:#F1F8E9; }}
+ #status {{ color:#FFE082; font-size:12.5px; margin-top:6px; min-height:16px; }}
+</style>
+<script>
+(function(){{
+  var bubble = document.querySelector('.bubble');
+  var text = bubble.getAttribute('data-text');
+  var statusEl = document.getElementById('status');
+  var muted = false, speaking = false;
+  function pickVoice(){{
+    if (!('speechSynthesis' in window)) return null;
+    var vs = speechSynthesis.getVoices();
+    var order = ['en-ZW','en-ZA','en-GB','en-NG','en-IE','en-AU','en-US','en'];
+    for (var i=0;i<order.length;i++){{
+      for (var j=0;j<vs.length;j++){{
+        var v = vs[j];
+        if (v && v.lang && v.lang.toLowerCase().indexOf(order[i].toLowerCase())===0){{
+          return v;
+        }}
+      }}
+    }}
+    return vs[0] || null;
+  }}
+  function speak(){{
+    if (muted){{ statusEl.textContent = '🔇 Muted'; return; }}
+    if (!('speechSynthesis' in window)){{
+      statusEl.textContent = 'Speech is not supported in this browser.';
+      return;
+    }}
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    var v = pickVoice();
+    if (v){{ u.voice = v; u.lang = v.lang; }}
+    u.rate = 0.95; u.pitch = 1; u.volume = 1;
+    u.onstart = function(){{
+      speaking = true; bubble.classList.add('speaking');
+      statusEl.textContent = '🔊 Speaking...';
+    }};
+    u.onend = function(){{
+      speaking = false; bubble.classList.remove('speaking');
+      statusEl.textContent = '✅ Welcome message finished.';
+    }};
+    u.onerror = function(){{
+      speaking = false; bubble.classList.remove('speaking');
+      statusEl.textContent = '';
+    }};
+    speechSynthesis.speak(u);
+  }}
+  document.getElementById('play').onclick = function(){{ muted = false; speak(); }};
+  document.getElementById('mute').onclick = function(){{
+    muted = !muted;
+    this.textContent = muted ? '✕' : '🔇';
+    speechSynthesis.cancel();
+    statusEl.textContent = muted ? '🔇 Muted' : 'Press 🔊 to hear the welcome';
+  }};
+  document.getElementById('close').onclick = function(){{
+    speechSynthesis.cancel();
+    document.getElementById('robotCard').style.display = 'none';
+  }};
+  if ('speechSynthesis' in window) {{
+    speechSynthesis.onvoiceschanged = function(){{ pickVoice(); }};
+  }}
+  setTimeout(function(){{ speak(); }}, 500);
+  function once(){{
+    if (!speaking && !muted) speak();
+  }}
+  ['pointerdown','keydown','touchstart'].forEach(function(ev){{
+    document.addEventListener(ev, function h(){{ once(); }}, {{ once:true }});
+  }});
+}})();
+</script>
+"""
+    try:
+        components.html(html, height=232, scrolling=False)
+    except Exception:
+        st.info(f"🤖 {safe_text}")
+
+
+if "robot_greeted" not in st.session_state:
+    st.session_state.robot_greeted = True
+    robot_welcome()
 
 
 # ---------------------------------------------------------------------------
