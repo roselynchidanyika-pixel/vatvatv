@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime as _dt
 import io
 import pathlib
+import re as _re
 
 import pandas as pd
 import streamlit as st
@@ -43,8 +44,7 @@ LOGO_SVG = (
     "<circle cx='45' cy='45' r='38' fill='none' stroke='#0D2A52' stroke-width='3'/>"
     "<g fill='#12315E'><circle cx='31' cy='33' r='10'/><circle cx='59' cy='33' r='10'/>"
     "<rect x='31' y='45' width='28' height='13'/></g>"
-    "<text x='45' y='70' font-size='12' font-family='Arial' text-anchor='middle' "
-    "font-weight='bold' fill='#12315E'>ZIMRA</text></svg>"
+    "</svg>"
 )
 LOGO_DATA_URI = "data:image/svg+xml;utf8," + LOGO_SVG.replace(" ", "%20").replace("#", "%23")
 
@@ -94,6 +94,18 @@ CSS = """
   font-size:15px; font-weight:600; margin:6px 0; }
 .formula .hi { color:#FFD54F; }
 .hint { color:#5A6B7E; font-size:13px; }
+.vcard { background:#fff; border:1px solid #CDE0F3; border-radius:12px;
+  padding:14px 18px; margin:10px 0; box-shadow:0 2px 6px rgba(18,49,94,.08); }
+.vtitle { font-weight:700; color:#12315E; font-size:15px; margin-bottom:8px; }
+.vtitle .vdsc { font-weight:400; color:#5A6B7E; font-size:13px; margin-left:8px; }
+.vformular { background:#12315E; color:#fff; border-radius:10px; padding:10px 14px;
+  font-size:15px; font-weight:600; margin:8px 0; }
+.vformular .hi { color:#FFD54F; }
+.vrow { padding:4px 0; border-bottom:1px dashed #E3ECF5; }
+.vrow:last-child { border-bottom:none; }
+.vlabel { display:inline-block; width:190px; color:#5A6B7E; font-size:13px;
+  font-weight:600; }
+.vvalue { color:#12315E; font-size:13px; }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -266,21 +278,75 @@ def _work_rows(t, side=None, categories=None):
         m = m[m["category"].isin(categories)]
     if m.empty:
         return pd.DataFrame()
-    return m[["txn_id", "description", "category", "vat_math", "vat_amount"]].copy()
+    return m.copy()
 
 
-def _detail_table(m, L):
+_CUR_LABEL = {"USD": "USD", "ZIG": "ZiG", "ZAR": "ZAR"}
+
+
+def _tax_cards(m, L):
+    """Render each transaction feed a line as a VAT calculation card."""
     if m.empty:
         st.caption("No transactions feed this line.")
         return
-    view = m.copy()
-    view["vat_amount"] = view["vat_amount"].map(lambda v: f"{float(v):,.2f}")
-    view["category"] = view["category"].map(
-        lambda c: f"{c} — {CATEGORY_GUIDE_DICT.get(c, '')}")
-    st.dataframe(view.rename(columns={"txn_id": "Txn", "description": "Description",
-                                      "category": "Category", "vat_math": "VAT calculation",
-                                      "vat_amount": f"VAT ({L})"}),
-                 hide_index=True, use_container_width=True)
+    for _, r in m.iterrows():
+        txn = str(r.get("txn_id") or "-")
+        desc = str(r.get("description") or "")
+        cur = _CUR_LABEL.get(str(r.get("currency") or ""), str(r.get("currency") or ""))
+        sched = str(r.get("schedule") or L)
+        amt = r.get("amount")
+        amt_s = f"{float(amt):,.2f}" if amt is not None else "-"
+        conv = r.get("converted_amount")
+        conv_s = f"{float(conv):,.2f}" if conv is not None else None
+        fxr = r.get("fx_rate")
+        fxm = str(r.get("fx_math") or "").strip()
+        cat = str(r.get("category") or "")
+        cat_lbl = CATEGORY_GUIDE_DICT.get(cat, cat)
+        vrate = str(r.get("vat_rate") or "-")
+        vmath = str(r.get("vat_math") or "-")
+        vat = r.get("vat_amount")
+        vat_s = f"{float(vat):,.2f}" if vat is not None else "-"
+
+        vform = _re.sub(r"\s*[x×]\s*", " × ", vmath).strip()
+        if vform and vform != "-":
+            vform = f"{L} {vform}"
+        else:
+            vform = "-"
+
+        _mm = _re.match(r"^(.*?)\s*=\s*(.*)$", vform, _re.S)
+        if _mm:
+            _expr, _ans = _mm.group(1).strip(), _mm.group(2).strip()
+        else:
+            _expr, _ans = vform, f"{vat_s} {L}"
+        if _re.fullmatch(r"-?[\d,.]+", _ans):
+            _ans = f"{_ans} {L}"
+
+        if cur == sched or conv_s is None:
+            rate_note = f"No conversion — {cur} is already the {L} schedule currency"
+            conv_line = f"{amt_s} {cur}"
+        else:
+            mm = _re.search(r"\((1 [A-Z]+ = [^)]+)\)", fxm)
+            rate_note = mm.group(1) if mm else f"1 {L} = {float(fxr):,.4f} {cur}"
+            conv_line = fxm if fxm else f"{amt_s} {cur} ÷ {float(fxr):,.4f} = {conv_s} {L}"
+
+        rows = "".join(
+            f"<div class='vrow'><span class='vlabel'>{lab}</span>"
+            f"<span class='vvalue'>{val}</span></div>"
+            for lab, val in (
+                ("Original amount", f"{amt_s} {cur}"),
+                ("Original currency", cur),
+                ("Exchange rate used", rate_note),
+                ("Converted amount", conv_line),
+                ("VAT treatment", cat_lbl),
+                ("VAT rate used", vrate),
+                ("VAT", vform),
+            ))
+        st.markdown(
+            f"<div class='vcard'><div class='vtitle'>VAT calculation — <b>{txn}</b>"
+            f"<span class='vdsc'>{desc}</span></div>"
+            f"<div class='vformular'>{_expr}<br>= <span class='hi'>{_ans}</span></div>"
+            f"{rows}</div>",
+            unsafe_allow_html=True)
 
 
 def _step(title, hint):
@@ -326,13 +392,13 @@ def show_workings(res):
               "Output VAT is collected from customers and paid to ZIMRA.")
         _formula("Line 2 (output tax on standard sales) = Standard sale value × 15.5%",
                  f"{float(sched.out_std):,.2f} {L}")
-        _detail_table(_work_rows(t, side="Output", categories=["standard"]), L)
+        _tax_cards(_work_rows(t, side="Output", categories=["standard"]), L)
         _formula("Line 3 (adjustments) = credit notes (−) + debit notes (+) + bad-debt relief (−)",
                  f"{float(sched.out_adj):,.2f} {L}")
-        _detail_table(_work_rows(t, side="Adjustment"), L)
+        _tax_cards(_work_rows(t, side="Adjustment"), L)
         _formula("Line 4 (reverse charge, imported services) = Service value × 15.5%",
                  f"{float(sched.rc_out):,.2f} {L}")
-        _detail_table(_work_rows(t, side="Output", categories=["imported_service"]), L)
+        _tax_cards(_work_rows(t, side="Output", categories=["imported_service"]), L)
         _formula("Line 5 (total output tax) = Line 2 + Line 3 + Line 4",
                  f"{float(sched.total_output):,.2f} {L}")
 
@@ -340,13 +406,13 @@ def show_workings(res):
               "Input VAT is deducted from output VAT before paying the net amount.")
         _formula("Line 6 (local purchases) = Σ Purchase VAT × business-use %",
                  f"{float(sched.in_local):,.2f} {L}")
-        _detail_table(_work_rows(t, side="Input", categories=["standard"]), L)
+        _tax_cards(_work_rows(t, side="Input", categories=["standard"]), L)
         _formula("Line 7 (imports of goods) = Σ (Customs value + duty) × 15.5%",
                  f"{float(sched.in_import):,.2f} {L}")
-        _detail_table(_work_rows(t, side="Input", categories=["import_goods"]), L)
+        _tax_cards(_work_rows(t, side="Input", categories=["import_goods"]), L)
         _formula("Line 8 (reverse-charge mirror input) = Σ Mirror credit",
                  f"{float(sched.rc_in):,.2f} {L}")
-        _detail_table(_work_rows(t, side="Input", categories=["imported_service"]), L)
+        _tax_cards(_work_rows(t, side="Input", categories=["imported_service"]), L)
         mixed_rows = _work_rows(t, side="Input", categories=["mixed"])
         if not mixed_rows.empty:
             st.markdown(
@@ -355,11 +421,11 @@ def show_workings(res):
                 f"disallowed (line 9) {float(sched.disallowed):,.2f} {L}. "
                 "Prohibited inputs (entertainment, passenger cars, clubs) are "
                 "excluded — claim = 0.")
-            _detail_table(mixed_rows, L)
+            _tax_cards(mixed_rows, L)
         prohib = _work_rows(t, side="Input", categories=["prohibited"])
         if not prohib.empty:
             st.caption("Excluded traces (input VAT legally blocked, claim = 0):")
-            _detail_table(prohib, L)
+            _tax_cards(prohib, L)
         _formula("Line 10 (total allowable input tax) = L6 + L7 + L8 + mixed recovered − L9",
                  f"{float(sched.total_input):,.2f} {L}")
 
