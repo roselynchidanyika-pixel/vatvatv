@@ -156,8 +156,23 @@ def run_compute():
     st.session_state.result = res
     st.session_state.norm_df = norm
     st.session_state.checks = checks
-    st.success("Computation complete. Review the Validation and VAT Return pages.")
+    st.success("Computation complete. Open the Return Summary to see the "
+               "schedules, all workings and the audit trail.")
     return res
+
+
+def run_checks():
+    df = get_working_df()
+    if df.empty:
+        st.warning("Load or enter transactions before validating.")
+        return
+    with st.spinner("Checking every transaction..."):
+        checks, norm = validation.validate(df)
+    st.session_state.checks = checks
+    st.session_state.norm_df = norm
+    summ = validation.summary_of(checks)
+    st.success(f"Checks complete: {summ['pass']} PASS · {summ['review']} REVIEW · "
+               f"{summ['fail']} FAIL.")
 
 
 def period_label(df):
@@ -408,184 +423,71 @@ def render_graphs(res):
         st.divider()
 
 
+def show_validation_summary(checks):
+    summ = validation.summary_of(checks)
+    a, b, c = st.columns(3)
+    a.metric("🟢 PASS checks", summ["pass"])
+    b.metric("🟠 REVIEW checks", summ["review"])
+    c.metric("🔴 FAIL checks", summ["fail"])
+    st.dataframe(checks[["check_id", "txn_id", "field", "status", "what_failed",
+                         "why", "financial_impact", "how_to_fix"]]
+                 .rename(columns={"check_id": "Check", "txn_id": "Txn",
+                                  "what_failed": "What failed", "why": "Why",
+                                  "financial_impact": "Financial impact",
+                                  "how_to_fix": "How to fix"}),
+                 hide_index=True, use_container_width=True, height=340)
+    fails = checks[checks["status"] == "FAIL"]
+    if len(fails):
+        st.error(f"{len(fails)} check(s) FAILED — fix these before filing.")
+    elif (checks["status"] == "REVIEW").any():
+        st.warning("No hard failures, but some rows need a manual review.")
+    else:
+        st.success("All checks passed.")
+
+
 # ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
-def page_dashboard():
-    res = st.session_state.get("result")
-    df = get_working_df()
-    snap = st.session_state.get("fx") or load_fx()
-    period = period_label(df)
-
-    if res:
-        status = res.status
-        if status == "PAYABLE":
-            pill, word = "pill-b", "VAT payable to ZIMRA"
-        elif status == "REFUNDABLE":
-            pill, word = "pill-g", "VAT refundable / held as a credit"
-        else:
-            pill, word = "pill-o", "Nil VAT position"
-        chips = " ".join(
-            f"<span class='pillstatus {pill}'>{ccy}: {float(s.net):,.2f} · "
-            f"{s.status}</span>" for ccy, s in res.schedules.items())
-        hero = (f"<div class='hero'><div class='sub'>ZIMBABWE VAT 7 · {period} · "
-                f"{res.counts['n_txns']} transactions</div>"
-                f"<div class='big'>Net VAT {res.net_vat:,.2f}</div>"
-                f"<div class='sub'><span class='pillstatus {pill}'>{word}</span>"
-                f"&nbsp; ZiG and USD schedules are computed separately</div>"
-                f"<div class='sub' style='margin-top:10px'>{chips}</div></div>")
-    else:
-        hero = (f"<div class='hero'><div class='sub'>ZIMBABWE VALUE ADDED TAX · "
-                f"RETURN AUTOMATION</div><div class='big'>Your VAT 7, explained "
-                f"end-to-end</div><div class='sub'>Load demo data, upload a "
-                f"file, or enter transactions manually — then compute the return "
-                f"and watch every number being built.</div></div>")
-    st.markdown(hero, unsafe_allow_html=True)
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-    ntx = res.counts["n_txns"] if res else len(df)
-    outv = f"{res.total_output_tax:,.0f}" if res else "—"
-    inv_ = f"{res.total_input_tax:,.0f}" if res else "—"
-    netv = f"{res.net_vat:,.0f}" if res else "—"
-    netsts = res.status if res else "payable / refundable"
-    tile4 = ("org" if res and res.status == "PAYABLE"
-             else ("grn" if res and res.status == "REFUNDABLE" else "gld"))
-    comp = ("✅" + str(res.counts["n_pass"]) + " 🟠" + str(res.counts["n_review"])
-            + " ❌" + str(res.counts["n_fail"])) if res else "—"
-    c1.markdown(f"<div class='tile gld'><div class='lbl'>Transactions</div>"
-                f"<div class='num'>{ntx}</div>"
-                f"<div class='foot'>in the working dataset</div></div>",
-                unsafe_allow_html=True)
-    c2.markdown(f"<div class='tile'><div class='lbl'>Output VAT</div>"
-                f"<div class='num'>{outv}</div>"
-                f"<div class='foot'>charged on sales</div></div>",
-                unsafe_allow_html=True)
-    c3.markdown(f"<div class='tile grn'><div class='lbl'>Input VAT</div>"
-                f"<div class='num'>{inv_}</div>"
-                f"<div class='foot'>allowable deduction</div></div>",
-                unsafe_allow_html=True)
-    c4.markdown(f"<div class='tile {tile4}'><div class='lbl'>Net VAT</div>"
-                f"<div class='num'>{netv}</div>"
-                f"<div class='foot'>{netsts}</div></div>",
-                unsafe_allow_html=True)
-    c5.markdown(f"<div class='tile gld'><div class='lbl'>Compliance</div>"
-                f"<div class='num'>{comp}</div>"
-                f"<div class='foot'>PASS · REVIEW · FAIL</div></div>",
-        unsafe_allow_html=True)
-
-    left, right = st.columns([3, 2])
-    with left:
-        st.markdown("#### 📋 Schedules at a glance")
-        if res:
-            for ccy, s in res.schedules.items():
-                lcolx, rcolx = st.columns([4, 1])
-                lcolx.markdown(
-                    f"<div class='workbox'><b>{ccy} schedule</b> — net "
-                    f"<span style='font-size:18px;font-weight:800;color:#12315E'>"
-                    f"{float(s.net):,.2f}</span> {ccy} · <b>{s.status}</b><br>"
-                    f"<span class='hint'>Output {float(s.total_output):,.2f} − "
-                    f"Input {float(s.total_input):,.2f} · filed separately "
-                    f"(ZIMRA rule, never mixed)</span></div>",
-                    unsafe_allow_html=True)
-                with rcolx:
-                    if st.button("Open", key=f"open_{ccy}"):
-                        st.session_state.menu = "🧮 VAT Return"
-                        st.rerun()
-        else:
-            st.info("No schedule yet — load data and click **Compute**.")
-    with right:
-        st.markdown("#### 🚀 Actions")
-        if st.button("🧪 Load demo data (Tri-Currency)", use_container_width=True):
-            st.session_state.base_df = sample_data.load_sample(
-                "Tri-Currency Traders (mixed USD+ZiG+ZAR)")
-            st.session_state.pop("result", None)
-            st.rerun()
-        if st.button("✍️ Enter transactions manually", use_container_width=True):
-            st.session_state.menu = "📥 Data & Validation"
-            st.rerun()
-        if st.button("🧮 Compute the VAT return", use_container_width=True,
-                     type="primary", disabled=df.empty):
-            run_compute()
-            st.session_state.menu = "🧮 VAT Return"
-            st.rerun()
-        st.caption(f"{len(df)} transaction(s) in the working dataset"
-                   f"{'.' if len(df) else ' — add some first.'}")
-
-    with st.expander("💱 Exchange rates used (quoted per 1 USD)"):
-        st.dataframe(pd.DataFrame(fx.rates_table(snap)), hide_index=True,
-                     use_container_width=True)
-        st.caption("The rate actually applied to a transaction — its source and "
-                   "date — is shown on every row of the Audit Trail.")
-
-    if res is not None:
-        st.markdown("#### 📋 Draft VAT 7 schedules (per currency, never mixed)")
-        tabs = st.tabs(["ZiG schedule"] if "ZIG" in res.schedules else [] +
-                       (["USD schedule"] if "USD" in res.schedules else []))
-        for tab, ccy in zip(tabs, ("ZIG", "USD")):
-            if ccy in res.schedules:
-                with tab:
-                    render_schedule(ccy)
-
-
-def page_learn():
-    st.subheader("📚 Understanding VAT")
-    for title, (tech, grade7) in explanations.LEARN_SECTIONS.items():
-        with st.expander(title, expanded=(title == "What is VAT?")):
-            st.markdown(f"**Technical:** {tech}")
-            st.info(f"**🧑‍🏫 In simple English:** {grade7}")
-    st.markdown("### 🔄 How VAT flows through the supply chain")
-    for step, text in explanations.VAT_FLOW:
-        st.markdown(f"- **{step}** — {text}")
-    st.markdown(
-        f"### 🏛️ Who must register & file?\n"
-        f"- Compulsory registration: taxable supplies > "
-        f"**US${float(config.VAT_REGISTRATION_THRESHOLD_USD):,.0f}** (or ZiG "
-        f"equivalent) in any 12-month period — effective {config.REGISTRATION_EFFECTIVE}.\n"
-        f"- The standard VAT rate is **{float(config.VAT_RATE_PCT):g}%** "
-        f"({config.VAT_RATE_EFFECTIVE}; Finance Act (No. 7) of 2025).\n"
-        f"- The return (VAT 7) is due by the **{config.RETURN_DUE_DAY}th** and "
-        f"payment by the **{config.PAYMENT_DAY}th** of the month after the tax "
-        f"period (SI 81 of 2025 — verify with ZIMRA).")
-
-
 def page_data():
-    st.subheader("📥 Data Input — upload, demo or enter transactions")
+    st.subheader("📤 Data Input")
+    df = get_working_df()
+    n = len(df)
+    label = st.session_state.get("src_label", "No dataset loaded yet")
+    if n:
+        st.success(f"📄 Loaded dataset: **{label}** ({n} transactions)")
+    else:
+        st.info("Choose a data source in the sidebar — Upload CSV, the "
+                "**Harare Traders** sample or the **Mixed Supplies** sample.")
 
-    src = st.radio("Source", ["🧪 Load demo / sample data", "📁 Upload CSV / Excel",
-                              "✍️ Manual entry & tablet"], horizontal=True)
+    if n:
+        cols = [c for c in ("txn_id", "date", "direction", "description",
+                            "counterparty", "currency", "category", "amount")
+                if c in df.columns]
+        st.dataframe(df[cols].head(15), hide_index=True, use_container_width=True,
+                     height=330)
+        st.caption("Preview — first 15 transactions. The full calculation trail "
+                   "is in the Audit Trail page.")
 
-    if src.startswith("🧪"):
-        st.radio("Choose sample dataset", list(sample_data.SAMPLE_FILES.keys()),
-                 key="demo_key", horizontal=True)
-        st.info(sample_data.SAMPLE_DESCRIPTIONS.get(
-            st.session_state.get("demo_key", list(sample_data.SAMPLE_FILES)[0]),
-            ""))
-        if st.button("📥 Load this demo dataset", type="primary"):
-            st.session_state.base_df = sample_data.load_sample(
-                st.session_state.demo_key)
-            st.session_state.pop("result", None)
-            st.success("Demo dataset loaded (simulated data).")
+    b1, b2 = st.columns([1, 1])
+    with b1:
+        if st.button("🔍 Run validation checks", use_container_width=True,
+                     disabled=df.empty):
+            run_checks()
+    with b2:
+        if st.button("🧮 Compute VAT Return", type="primary", use_container_width=True,
+                     disabled=df.empty):
+            run_compute()
+            st.session_state.menu = "📊 Return Summary"
             st.rerun()
 
-    elif src.startswith("📁"):
-        up = st.file_uploader("Upload transactions (CSV or Excel)",
-                              type=["csv", "xlsx", "xls"])
-        if up is not None:
-            df = read_uploaded(up)
-            if df is not None:
-                st.session_state.base_df = df
-                st.session_state.pop("result", None)
-                st.success(f"Uploaded {len(df)} rows from {up.name}.")
-        with st.expander("Expected / accepted columns"):
-            st.write("Accepted columns (friendly names OK, e.g. 'Transaction ID', "
-                     "'Amount (USD)', 'VAT Category'): " +
-                     ", ".join(validation.COLUMN_ALIASES.keys()))
-            st.caption("Required: a transaction ID, date, transaction type, "
-                       "amount, currency and VAT category. Everything else is "
-                       "optional and freely named.")
+    checks = st.session_state.get("checks")
+    if checks is not None:
+        st.divider()
+        st.markdown("#### Validation checks on this dataset")
+        show_validation_summary(checks)
 
-    else:
-        st.markdown("#### ✍️ Manual transaction entry tablet")
+    st.divider()
+    with st.expander("➕ Add a transaction manually"):
         with st.form("manual_form"):
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -606,27 +508,26 @@ def page_data():
                 m_incl = st.checkbox("Amount is VAT-inclusive", value=False)
             c4, c5, c6 = st.columns(3)
             with c4:
-                m_cat = st.selectbox("VAT category",
-                                     ["standard", "zero_rated", "exempt",
-                                      "export"],
-                                     help="standard = 15.5% VAT · zero_rated = "
-                                          "0% (input still claimable) · exempt = "
-                                          "no VAT, input generally not claimable")
+                m_cat = st.selectbox(
+                    "VAT category", ["standard", "zero_rated", "exempt",
+                                     "export"],
+                    help="standard = 15.5% VAT · zero_rated = 0% (input still "
+                         "claimable) · exempt = no VAT, input generally not claimable")
                 st.caption("standard = VAT at 15.5% · zero_rated = 0% (input "
                            "still claimable) · exempt = no VAT, input generally "
                            "not claimable")
                 m_cv = st.number_input("Customs value (imports)", value=0.0)
                 m_cd = st.number_input("Customs duty (imports)", value=0.0)
             with c5:
-                m_prohib = st.selectbox("Prohibited input?", ["", "entertainment",
-                                       "passenger_motor_vehicle", "club_subscription"])
+                m_prohib = st.selectbox("Prohibited input?",
+                                        ["", "entertainment",
+                                         "passenger_motor_vehicle", "club_subscription"])
                 m_mixed = st.checkbox("Mixed-supply (overhead) input", value=False)
                 m_doc = st.checkbox("Supporting document available", value=True)
             with c6:
                 m_adj = st.selectbox("Adjustment type",
                                      ["", "credit_note", "debit_note",
-                                      "bad_debt_relief",
-                                      "prior_period_correction"])
+                                      "bad_debt_relief", "prior_period_correction"])
                 m_use = st.slider("Business-use %", 0, 100, 100)
                 m_notes = st.text_input("Notes")
             sent = st.form_submit_button("➕ Add transaction to the tablet",
@@ -647,10 +548,10 @@ def page_data():
             st.session_state.setdefault("manual_rows", []).append(row)
             st.success("Transaction added to the tablet.")
 
-        st.markdown("#### 🧾 Tablet — edit rows directly")
+    with st.expander("🧾 Edit rows directly with the tablet"):
         working = get_working_df()
         if working.empty:
-            st.info("No rows yet. Add via the form above or load demo data.")
+            st.info("No rows yet. Add via the form above or load a dataset.")
         else:
             cfg = {
                 "direction": st.column_config.SelectboxColumn(
@@ -662,135 +563,110 @@ def page_data():
                                          "imported_service"]),
                 "currency": st.column_config.SelectboxColumn(
                     "currency", options=["ZIG", "USD", "ZAR"]),
-                "business_use_pct": st.column_config.NumberColumn("business_use_pct", min_value=0, max_value=100),
+                "business_use_pct": st.column_config.NumberColumn(
+                    "business_use_pct", min_value=0, max_value=100),
             }
             edited = st.data_editor(
                 working, key="tablet", num_rows="dynamic", hide_index=True,
-                use_container_width=True, height=400,
-                column_config=cfg,
+                use_container_width=True, height=400, column_config=cfg,
                 disabled=["amount", "date", "description", "txn_id"])
             if st.button("💾 Apply the edited tablet to the return"):
                 st.session_state.base_df = edited
                 st.session_state.manual_rows = []
                 st.session_state.pop("result", None)
+                st.session_state.pop("checks", None)
                 st.success("Tablet applied.")
                 st.rerun()
 
-    manual = st.session_state.get("manual_rows", [])
-    if manual:
-        st.caption(f"Manually added rows in the tablet: {len(manual)}")
+    if st.session_state.get("manual_rows"):
+        st.caption(f"Manually added rows in the tablet: "
+                   f"{len(st.session_state['manual_rows'])}")
         if st.button("🗑️ Clear all manually added rows"):
             st.session_state.manual_rows = []
             st.session_state.pop("result", None)
+            st.session_state.pop("checks", None)
             st.rerun()
 
 
-def page_validation():
-    st.subheader("🔍 Data Check & Validation")
+def page_summary():
+    res = st.session_state.get("result")
     df = get_working_df()
-    if df.empty:
-        st.info("Load or enter transactions first (Data & Validation page).")
-        return
-    if st.button("🔍 Run the validation checks now", type="primary"):
-        with st.spinner("Checking every transaction..."):
-            checks, norm = validation.validate(df)
-        st.session_state.checks = checks
-        st.session_state.norm_df = norm
-    checks = st.session_state.get("checks")
-    if checks is None:
-        st.info("The checks have not been run yet for the current data.")
-        return
-    summ = validation.summary_of(checks)
-    a, b, c = st.columns(3)
-    a.metric("🟢 PASS checks", summ["pass"])
-    b.metric("🟠 REVIEW checks", summ["review"])
-    c.metric("🔴 FAIL checks", summ["fail"])
-    st.dataframe(checks[["check_id", "txn_id", "field", "status", "what_failed",
-                         "why", "financial_impact", "how_to_fix"]]
-                 .rename(columns={"check_id": "Check", "txn_id": "Txn",
-                                  "what_failed": "What failed", "why": "Why",
-                                  "financial_impact": "Financial impact",
-                                  "how_to_fix": "How to fix"}),
-                 hide_index=True, use_container_width=True, height=420)
-    fails = checks[checks["status"] == "FAIL"]
-    if len(fails):
-        st.error(f"{len(fails)} check(s) FAILED — fix these before filing.")
-    elif (checks["status"] == "REVIEW").any():
-        st.warning("No hard failures, but some rows need a manual review.")
-    else:
-        st.success("All checks passed.")
-
-
-def page_return():
-    res = st.session_state.get("result")
     if res is None:
-        st.info("Compute the return first (Dashboard or Data & Validation page).")
-        if st.button("Compute now"):
-            run_compute()
+        if df.empty:
+            st.info("No return yet — load a dataset from the sidebar first.")
+        else:
+            st.info("The return has not been computed yet for this dataset.")
+            if st.button("🧮 Compute the VAT return now", type="primary"):
+                run_compute()
+                st.session_state.menu = "📊 Return Summary"
+                st.rerun()
         return
-    st.subheader("📋 VAT Return — the schedules you file (never mixed)")
-    category_legend()
-    tabs = st.tabs([f"{ccy} schedule" for ccy in res.schedules])
-    for tab, ccy in zip(tabs, res.schedules):
-        with tab:
-            render_schedule(ccy)
 
-    st.markdown("##### 📏 De minimis invoice check (US$10 threshold)")
-    if res.de_minimis_invoice_rows:
-        st.dataframe(pd.DataFrame(res.de_minimis_invoice_rows)[
-            ["txn_id", "description", "currency", "usd_equivalent", "threshold",
-             "check", "note"]].rename(columns={"txn_id": "Txn",
-                "usd_equivalent": "US$ equivalent",
-                "threshold": "Threshold (US$)", "check": "Result",
-                "note": "Note"}), hide_index=True, use_container_width=True)
-        st.caption("De minimis (invoicing) means a very small amount. A supply "
-                   "below US$10 does not need a fiscal invoice, but it is NOT "
-                   "automatically VAT-exempt — its VAT treatment is still "
-                   "determined normally.")
+    status = res.status
+    if status == "PAYABLE":
+        pill, word = "pill-b", "VAT payable to ZIMRA"
+    elif status == "REFUNDABLE":
+        pill, word = "pill-g", "VAT refundable / held as a credit"
     else:
-        st.caption("No standard-rated transactions to check.")
+        pill, word = "pill-o", "Nil VAT position"
+    chips = " ".join(
+        f"<span class='pillstatus {pill}'>{ccy}: {float(s.net):,.2f} · "
+        f"{s.status}</span>" for ccy, s in res.schedules.items())
+    st.markdown(
+        f"<div class='hero'><div class='sub'>ZIMBABWE VAT 7 · "
+        f"{period_label(df)} · {res.counts['n_txns']} transactions · "
+        f"{res.counts['n_pass']} PASS / {res.counts['n_review']} REVIEW / "
+        f"{res.counts['n_fail']} FAIL</div>"
+        f"<div class='big'>Net VAT {res.net_vat:,.2f}</div>"
+        f"<div class='sub'><span class='pillstatus {pill}'>{word}</span>"
+        f"&nbsp;&nbsp;{chips}</div></div>", unsafe_allow_html=True)
 
-    res_count = res.counts
-    a, b, c = st.columns(3)
-    a.metric("Transactions PASS", f"{res_count['n_pass']} ✅")
-    b.metric("Transactions REVIEW", f"{res_count['n_review']} 🟠")
-    c.metric("Transactions FAIL", f"{res_count['n_fail']} ❌")
+    tab_s, tab_w, tab_g, tab_r = st.tabs(
+        ["📋 Detailed Schedules", "🧮 All Workings", "📊 Graphs",
+         "📋 Management Report"])
 
-    with st.expander("🧮 Show all workings (steps 1-6)", expanded=True):
+    with tab_s:
+        category_legend()
+        subtabs = st.tabs([f"{ccy} schedule" for ccy in res.schedules])
+        for sub_tab, ccy in zip(subtabs, res.schedules):
+            with sub_tab:
+                render_schedule(ccy)
+        st.markdown("##### 📏 De minimis invoice check (US$10 threshold)")
+        if res.de_minimis_invoice_rows:
+            st.dataframe(pd.DataFrame(res.de_minimis_invoice_rows)[
+                ["txn_id", "description", "currency", "usd_equivalent",
+                 "threshold", "check", "note"]].rename(
+                columns={"txn_id": "Txn", "usd_equivalent": "US$ equivalent",
+                         "threshold": "Threshold (US$)", "check": "Result",
+                         "note": "Note"}), hide_index=True, use_container_width=True)
+            st.caption("De minimis (invoicing) means a very small amount. A "
+                       "supply below US$10 does not need a fiscal invoice, but "
+                       "it is NOT automatically VAT-exempt — its VAT treatment "
+                       "is still determined normally.")
+        if status == "PAYABLE":
+            vtext = "VAT PAYABLE — the business must pay this amount to ZIMRA."
+        elif status == "REFUNDABLE":
+            vtext = ("VAT REFUNDABLE / CREDIT — ZIMRA owes this amount (small "
+                     "refunds below US$60 are held as a credit).")
+        else:
+            vtext = "NIL — no VAT payable and nothing refundable."
+        fc1, fc2 = st.columns([1, 2])
+        fc1.metric(f"Final position — {status}", f"{res.net_vat:,.2f}")
+        fc2.markdown(vtext + " **Net = Output VAT − Allowable Input VAT ± "
+                             "Adjustments.**")
+
+    with tab_w:
         show_workings(res)
-    with st.expander("🕵️ Complete audit / calculation trail", expanded=True):
-        show_audit(res)
 
-    st.markdown("##### 🧾 Final result")
-    if res.status == "PAYABLE":
-        emoji, text = "🟢", "VAT PAYABLE — the business must pay this amount to ZIMRA."
-    elif res.status == "REFUNDABLE":
-        emoji, text = "🟢", ("VAT REFUNDABLE / CREDIT — ZIMRA owes this amount "
-                             "(small refunds below US$60 are held as a credit).")
-    else:
-        emoji, text = "⚪", "NIL — no VAT payable and nothing refundable."
-    c1, c2 = st.columns([1, 2])
-    c1.metric(f"{emoji} VAT POSITION — {res.status}",
-              f"{res.net_vat:,.2f}", f"per combined view")
-    c2.markdown(text + " **Net = Output VAT − Allowable Input VAT ± Adjustments.** "
-                       "Full composition is shown above, per schedule, so a "
-                       "reviewer can trace every number to a transaction.")
+    with tab_g:
+        render_graphs(res)
+
+    with tab_r:
+        report_content(res)
 
 
-def page_graphs():
-    res = st.session_state.get("result")
-    if res is None:
-        st.info("Compute the return first to see the graphs.")
-        return
-    render_graphs(res)
-
-
-def page_report():
-    res = st.session_state.get("result")
-    if res is None:
-        st.info("Compute the return first.")
-        return
-    st.subheader("📊 Management Summary")
+def report_content(res):
+    st.markdown("#### 📊 Management Summary")
     m = res.management()
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total sales", f"{m['total_sales']:,.2f}")
@@ -818,11 +694,12 @@ def page_report():
                        "Zimbabwe_VAT_Report.md", "text/markdown")
 
     st.divider()
-    st.subheader("📤 Share the final report")
-    st.markdown("### ✉️ Send by email (SMTP)")
+    st.markdown("#### 📤 Share the final report")
+    st.markdown("**✉️ Send by email (SMTP)**")
     if share.smtp_configured():
         recipients = st.text_input("Recipient email(s), comma-separated")
-        subject = st.text_input("Subject", "Zimbabwe VAT 7 return — management summary")
+        subject = st.text_input("Subject",
+                                "Zimbabwe VAT 7 return — management summary")
         if st.button("Send email", type="primary"):
             ok, msg = share.send_email(subject, report_md, recipients)
             if ok:
@@ -834,7 +711,7 @@ def page_report():
             "SMTP is not configured. To enable email, add an **[smtp]** section "
             "to your Streamlit secrets (host, port, user, password, sender) — "
             "never commit credentials to the repository.")
-    st.markdown("### 💬 Send by WhatsApp (no API key needed)")
+    st.markdown("**💬 Send by WhatsApp (no API key needed)**")
     phone = st.text_input("WhatsApp number (international digits, e.g. 2637... )")
     wa_text = report_generator.share_text(res)
     st.code(wa_text, language=None)
@@ -846,85 +723,21 @@ def page_report():
         st.caption("Enter a WhatsApp number to build the share link.")
 
 
-QUIZ = [
-    ("What is VAT?", ["A tax on company profit", "An indirect tax on consumption",
-                      "A tax on salaries", "A customs duty"], 1,
-     "VAT is an indirect consumption tax charged on supplies and imports."),
-    ("What is output VAT?", ["VAT on purchases", "VAT on sales",
-                             "VAT paid to suppliers", "VAT refunded by ZIMRA"], 1,
-     "Output VAT is the VAT the business charges on its taxable sales."),
-    ("What is input VAT?", ["VAT on purchases", "VAT on sales",
-                            "VAT on exports", "VAT on salaries"], 0,
-     "Input VAT is the VAT the business pays on qualifying purchases."),
-    ("A zero-rated supply means:", ["Nothing is stated", "0% VAT, input tax still claimable",
-                                    "No tax at all", "VAT at the standard rate"], 1,
-     "Zero-rated = 0% rate with input-tax credit preserved."),
-    ("An exempt supply means:", ["0% VAT like zero-rated", "No VAT, and input tax generally not claimable",
-                                 "VAT is charged twice", "Input tax is fully claimable"], 1,
-     "Exempt supplies carry no VAT and generally no input-tax credit."),
-    ("Who generally bears VAT?", ["The Government", "The final consumer",
-                                  "The bank", "The logistics company"], 1,
-     "The final consumer bears the economic cost; the business collects and accounts for it."),
-    ("A credit note on a standard supply:", ["Increases output VAT", "Reduces output VAT",
-                                             "Creates output VAT", "Has no effect"], 1,
-     "A credit note reduces the VAT charged on the original supply."),
-    ("The invoicing de minimis rule means:", ["Supplies below US$10 are exempt",
-        "No fiscal invoice needed below US$10 — but VAT treatment still applies",
-        "No VAT below US$10", "All supplies below US$10 are zero-rated"], 1,
-     "Below US$10 a fiscal invoice is not required, but the supply is NOT automatically exempt."),
-    ("Imported services are treated as:", ["Exempt", "Zero-rated",
-        "Reverse-charged (output + mirror input)", "Not taxable"], 2,
-     "Imported services are reverse-charged under VAT Act s13A."),
-    ("An exchange rate is used to:", ["Change the VAT rate",
-        "Convert foreign-currency amounts into the schedule currency",
-        "Round VAT", "Set the tax period"], 1,
-     "Exchange rates convert ZAR/USD/ZiG amounts so each transaction lands on the correct schedule."),
-]
-
-
-def page_quiz():
-    st.subheader("🧠 Test your VAT knowledge")
-    score = 0
-    for i, (q, opts, correct, explain) in enumerate(QUIZ):
-        with st.form(f"quiz_{i}"):
-            st.markdown(f"**Q{i+1}. {q}**")
-            answer = st.radio("Choose an answer", opts, key=f"q{i}")
-            submit = st.form_submit_button("Check answer")
-        if submit:
-            if answer == opts[correct]:
-                score += 1
-                st.success("🟢 PASS — " + explain)
-            else:
-                st.error("🔴 FAIL — " + explain + " (correct answer: "
-                         + opts[correct] + ")")
-    if score:
-        st.metric("Your score", f"{score}/{len(QUIZ)}")
-
-
-def page_assumptions():
-    st.subheader("⚙️ Legal & Computational Assumptions — Sources")
-    doc = pathlib.Path(__file__).parent / "docs" / "LEGAL_ASSUMPTIONS.md"
-    if doc.exists():
-        st.markdown(doc.read_text(encoding="utf-8"))
+def page_audit():
+    st.subheader("🔍 Audit Trail")
+    checks = st.session_state.get("checks")
+    if checks is not None:
+        show_validation_summary(checks)
+        st.divider()
     else:
-        st.markdown(ve_assumptions_text())
-    st.divider()
-    st.subheader("🔗 Official sources")
-    for ref, desc, url in config.REFERENCES:
-        st.markdown(f"- **{ref}** — {desc}  \n  {url}")
-    st.divider()
-    vat_definition_box()
-
-
-def ve_assumptions_text():
-    return (f"**Standard VAT rate:** {float(config.VAT_RATE_PCT):g}% effective "
-            f"{config.VAT_RATE_EFFECTIVE} — {config.VAT_RATE_SOURCE}\n\n"
-            f"**Registration threshold:** US${float(config.VAT_REGISTRATION_THRESHOLD_USD):,.0f} "
-            f"— {config.REGISTRATION_SOURCE}\n\n"
-            f"**Invoicing de minimis:** US${float(config.DE_MINIMIS_INVOICE_USD):,.2f} "
-            f"— {config.DE_MINIMIS_INVOICE_SOURCE}\n\n"
-            f"**Apportionment de minimis:** {float(config.DE_MINIMIS_APPORTIONMENT_PCT*100):g}% "
-            f"exempt — {config.DE_MINIMIS_APPORTIONMENT_SOURCE}")
+        st.caption("Run the validation checks on the **Data Input** page to see "
+                   "the summary here.")
+    res = st.session_state.get("result")
+    if res is None:
+        st.info("Compute the return first — the full calculation trail for "
+                "every transaction is built then.")
+        return
+    show_audit(res)
 
 
 def page_tests():
@@ -948,9 +761,126 @@ def page_tests():
                        "vat_test_results.csv", "text/csv")
 
 
+QUIZ = [
+    ("What is VAT?", ["A tax on company profit",
+                      "An indirect tax on consumption",
+                      "A tax on salaries", "A customs duty"], 1,
+     "VAT is an indirect consumption tax charged on supplies and imports."),
+    ("What is output VAT?", ["VAT on purchases", "VAT on sales",
+                             "VAT paid to suppliers", "VAT refunded by ZIMRA"], 1,
+     "Output VAT is the VAT the business charges on its taxable sales."),
+    ("What is input VAT?", ["VAT on purchases", "VAT on sales",
+                            "VAT on exports", "VAT on salaries"], 0,
+     "Input VAT is the VAT the business pays on qualifying purchases."),
+    ("A zero-rated supply means:", ["Nothing is stated",
+        "0% VAT, input tax still claimable", "No tax at all",
+        "VAT at the standard rate"], 1,
+     "Zero-rated = 0% rate with input-tax credit preserved."),
+    ("An exempt supply means:", ["0% VAT like zero-rated",
+        "No VAT, and input tax generally not claimable",
+        "VAT is charged twice", "Input tax is fully claimable"], 1,
+     "Exempt supplies carry no VAT and generally no input-tax credit."),
+    ("Who generally bears VAT?", ["The Government", "The final consumer",
+                                  "The bank", "The logistics company"], 1,
+     "The final consumer bears the economic cost; the business collects and accounts for it."),
+    ("A credit note on a standard supply:", ["Increases output VAT",
+        "Reduces output VAT", "Creates output VAT", "Has no effect"], 1,
+     "A credit note reduces the VAT charged on the original supply."),
+    ("The invoicing de minimis rule means:", ["Supplies below US$10 are exempt",
+        "No fiscal invoice needed below US$10 — but VAT treatment still applies",
+        "No VAT below US$10", "All supplies below US$10 are zero-rated"], 1,
+     "Below US$10 a fiscal invoice is not required, but the supply is NOT automatically exempt."),
+    ("Imported services are treated as:", ["Exempt", "Zero-rated",
+        "Reverse-charged (output + mirror input)", "Not taxable"], 2,
+     "Imported services are reverse-charged under VAT Act s13A."),
+    ("An exchange rate is used to:", ["Change the VAT rate",
+        "Convert foreign-currency amounts into the schedule currency",
+        "Round VAT", "Set the tax period"], 1,
+     "Exchange rates convert ZAR/USD/ZiG amounts so each transaction lands on the correct schedule."),
+]
+
+
+def page_quiz():
+    st.markdown("### 🧠 Quick VAT quiz")
+    score = 0
+    for i, (q, opts, correct, explain) in enumerate(QUIZ):
+        with st.form(f"quiz_{i}"):
+            st.markdown(f"**Q{i+1}. {q}**")
+            answer = st.radio("Choose an answer", opts, key=f"q{i}")
+            submit = st.form_submit_button("Check answer")
+        if submit:
+            if answer == opts[correct]:
+                score += 1
+                st.success("🟢 PASS — " + explain)
+            else:
+                st.error("🔴 FAIL — " + explain + " (correct answer: "
+                         + opts[correct] + ")")
+    if score:
+        st.metric("Your score", f"{score}/{len(QUIZ)}")
+
+
+def ve_assumptions_text():
+    return (f"**Standard VAT rate:** {float(config.VAT_RATE_PCT):g}% effective "
+            f"{config.VAT_RATE_EFFECTIVE} — {config.VAT_RATE_SOURCE}\n\n"
+            f"**Registration threshold:** US${float(config.VAT_REGISTRATION_THRESHOLD_USD):,.0f} "
+            f"— {config.REGISTRATION_SOURCE}\n\n"
+            f"**Invoicing de minimis:** US${float(config.DE_MINIMIS_INVOICE_USD):,.2f} "
+            f"— {config.DE_MINIMIS_INVOICE_SOURCE}\n\n"
+            f"**Apportionment de minimis:** {float(config.DE_MINIMIS_APPORTIONMENT_PCT*100):g}% "
+            f"exempt — {config.DE_MINIMIS_APPORTIONMENT_SOURCE}")
+
+
+def page_assumptions():
+    st.subheader("📚 Assumptions & Law")
+    vat_definition_box()
+
+    st.markdown("### 🎓 Learn VAT")
+    for title, (tech, grade7) in explanations.LEARN_SECTIONS.items():
+        with st.expander(title, expanded=(title == "What is VAT?")):
+            st.markdown(f"**Technical:** {tech}")
+            st.info(f"**🧑‍🏫 In simple English:** {grade7}")
+    st.markdown("### 🔄 How VAT flows through the supply chain")
+    for step, text in explanations.VAT_FLOW:
+        st.markdown(f"- **{step}** — {text}")
+
+    st.markdown("### 🏛️ Who must register & file?")
+    st.markdown(
+        f"- Compulsory registration: taxable supplies > "
+        f"**US${float(config.VAT_REGISTRATION_THRESHOLD_USD):,.0f}** (or ZiG "
+        f"equivalent) in any 12-month period — effective {config.REGISTRATION_EFFECTIVE}.\n"
+        f"- The standard VAT rate is **{float(config.VAT_RATE_PCT):g}%** "
+        f"({config.VAT_RATE_EFFECTIVE}; Finance Act (No. 7) of 2025).\n"
+        f"- The return (VAT 7) is due by the **{config.RETURN_DUE_DAY}th** and "
+        f"payment by the **{config.PAYMENT_DAY}th** of the month after the tax "
+        f"period (SI 81 of 2025 — verify with ZIMRA).")
+
+    page_quiz()
+
+    st.markdown("### ⚖️ Legal & computational assumptions used")
+    doc = pathlib.Path(__file__).parent / "docs" / "LEGAL_ASSUMPTIONS.md"
+    if doc.exists():
+        st.markdown(doc.read_text(encoding="utf-8"))
+    else:
+        st.markdown(ve_assumptions_text())
+
+    st.markdown("### 🔗 Official sources")
+    for ref, desc, url in config.REFERENCES:
+        st.markdown(f"- **{ref}** — {desc}  \n  {url}")
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
+MAIN_SAMPLES = [
+    "Harare Traders (21 transactions)",
+    "Tri-Currency Traders (mixed USD+ZiG+ZAR)",
+]
+OTHER_SAMPLES = [
+    "Amber Mart (ZiG worked example)",
+    "Veritas Wholesale (USD only)",
+    "QA — dataset with errors (PASS/FAIL demo)",
+]
+
 with st.sidebar:
     st.markdown("### 💱 Currency Converter")
     snap = st.session_state.get("fx") or load_fx()
@@ -971,22 +901,60 @@ with st.sidebar:
         load_fx(refresh=True)
         st.rerun()
 
-    st.markdown("### ⚙️ Options")
+    st.markdown("### 📂 Data Source")
+    src_choice = st.radio(
+        "Choose data source",
+        ["📄 Sample: Harare Traders", "📄 Sample: Mixed Supplies",
+         "📁 Upload CSV / Excel"],
+        index=0)
+    if src_choice.startswith("📄"):
+        key = MAIN_SAMPLES[0] if src_choice.endswith("Harare Traders") else MAIN_SAMPLES[1]
+        if st.session_state.get("src_key") != key:
+            st.session_state.base_df = sample_data.load_sample(key)
+            st.session_state.src_key = key
+            st.session_state.src_label = sample_data.SAMPLE_NAMES[key]
+            st.session_state.pop("result", None)
+            st.session_state.pop("checks", None)
+    else:
+        up = st.file_uploader("Upload transactions (CSV or Excel)",
+                              type=["csv", "xlsx", "xls"])
+        if up is not None:
+            dfx = read_uploaded(up)
+            if dfx is not None:
+                st.session_state.base_df = dfx
+                st.session_state.src_key = "upload"
+                st.session_state.src_label = up.name
+                st.session_state.pop("result", None)
+                st.session_state.pop("checks", None)
+        with st.expander("Expected columns"):
+            st.write("Accepted columns (friendly names OK, e.g. 'Transaction ID', "
+                     "'Amount (USD)', 'VAT Category'): " +
+                     ", ".join(validation.COLUMN_ALIASES.keys()))
+            st.caption("Required: a transaction ID, date, transaction type, "
+                       "amount, currency and VAT category. Everything else is "
+                       "optional and freely named.")
+    with st.expander("Other demo datasets"):
+        st.radio("Load", OTHER_SAMPLES, key="other_demo")
+        if st.button("Load selected"):
+            key2 = st.session_state.other_demo
+            st.session_state.base_df = sample_data.load_sample(key2)
+            st.session_state.src_key = key2
+            st.session_state.src_label = sample_data.SAMPLE_NAMES[key2]
+            st.session_state.pop("result", None)
+            st.session_state.pop("checks", None)
+
+    st.markdown("### ⚙️ Advanced options")
     st.session_state.de_minimis = st.checkbox(
         "Apply apportionment de minimis (≤5% exempt → full input recovery)",
         value=st.session_state.get("de_minimis", True))
     st.caption(f"Standard VAT rate: {float(config.VAT_RATE_PCT):g}% "
-               f"({config.VAT_RATE_EFFECTIVE}).")
+               f"({config.VAT_RATE_EFFECTIVE}). Blank currencies are assumed ZiG.")
 
     st.markdown("### 🧭 Navigation")
-    menu = st.radio("Go to", [
-        "🏠 Dashboard", "📚 Learn VAT", "📥 Data & Validation",
-        "🧮 VAT Return", "📊 Graphs", "📋 Report & Share",
-        "🧠 VAT Quiz", "⚙️ Assumptions & Sources", "🧪 Test Cases"],
-        index=["🏠 Dashboard", "📚 Learn VAT", "📥 Data & Validation",
-               "🧮 VAT Return", "📊 Graphs", "📋 Report & Share",
-               "🧠 VAT Quiz", "⚙️ Assumptions & Sources", "🧪 Test Cases"]
-        .index(st.session_state.get("menu", "🏠 Dashboard")))
+    _nav = ["🏠 Data Input", "📊 Return Summary", "🔍 Audit Trail",
+            "🧪 Test Cases", "📚 Assumptions & Law"]
+    menu = st.radio("Go to", _nav,
+                    index=_nav.index(st.session_state.get("menu", "🏠 Data Input")))
     st.session_state.menu = menu
 
 st.divider()
@@ -994,25 +962,16 @@ st.divider()
 # ---------------------------------------------------------------------------
 # Main dispatch
 # ---------------------------------------------------------------------------
-if menu == "🏠 Dashboard":
-    page_dashboard()
-elif menu == "📚 Learn VAT":
-    page_learn()
-elif menu == "📥 Data & Validation":
+if menu == "🏠 Data Input":
     page_data()
-    page_validation()
-elif menu == "🧮 VAT Return":
-    page_return()
-elif menu == "📊 Graphs":
-    page_graphs()
-elif menu == "📋 Report & Share":
-    page_report()
-elif menu == "🧠 VAT Quiz":
-    page_quiz()
-elif menu == "⚙️ Assumptions & Sources":
-    page_assumptions()
+elif menu == "📊 Return Summary":
+    page_summary()
+elif menu == "🔍 Audit Trail":
+    page_audit()
 elif menu == "🧪 Test Cases":
     page_tests()
+elif menu == "📚 Assumptions & Law":
+    page_assumptions()
 
 vat_definition_box()
 st.caption("Zimbabwe VAT Return Automation & Explainable VAT System — LEARN → ENTER → "

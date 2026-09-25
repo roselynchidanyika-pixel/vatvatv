@@ -85,14 +85,55 @@ S-Q7,2026-05-09,sale,Zero-rated export without proof of export,Foreign buyer,exp
 P-Q8,2026-05-10,purchase,Purchase without tax invoice,Supplier,standard,1500.00,FALSE,0,0,,100,,FALSE,FALSE,SP-402,FALSE,ZIG,,,,REVIEW: input claim may be disallowed
 """
 
+# --------------------------------------------------------------------------
+# 5. Simple sample — "Harare Traders" (21 transactions, ZiG + some USD/ZAR)
+#    Mirrors a clean, everyday trading VAT return.
+# --------------------------------------------------------------------------
+HARARE_CSV = """txn_id,date,direction,description,counterparty,category,amount,vat_inclusive,customs_value,customs_duty,prohibited_reason,business_use_pct,adjustment_type,mixed_input,import_flag,invoice_number,supporting_document_available,currency,exchange_rate,exchange_rate_date,exchange_rate_source,notes
+S-001,2025-01-05,sale,Retail sales - groceries,Walk-in customers,standard,9000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-101,TRUE,ZIG,,,,Standard sale
+S-002,2025-01-08,sale,Consulting fees invoiced,Delta Foods (Pvt) Ltd,standard,3000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-102,TRUE,ZIG,,,,Standard sale
+S-003,2025-01-09,sale,Sale of mealie meal (zero-rated food),Wholesaler,zero_rated,2500.00,FALSE,0,0,,100,,FALSE,FALSE,INV-103,TRUE,ZIG,,,,Zero-rated foodstuff
+S-004,2025-01-10,sale,Brown bread sales (zero-rated),Retail,zero_rated,1500.00,FALSE,0,0,,100,,FALSE,FALSE,INV-104,TRUE,ZIG,,,,Zero-rated foodstuff
+S-005,2025-01-11,sale,Fresh milk sales (zero-rated),Retail,zero_rated,1200.00,FALSE,0,0,,100,,FALSE,FALSE,INV-105,TRUE,ZIG,,,,Zero-rated foodstuff
+S-006,2025-01-12,sale,Exported goods to Zambia (Bill of Entry),Zambezi Ltd (ZM),export,8000.00,FALSE,0,0,,100,,FALSE,FALSE,BL-106,TRUE,USD,,,,Zero-rated export with proof
+S-007,2025-01-15,sale,Residential rent - Avondale flats,Tenant,exempt,750.00,FALSE,0,0,,100,,FALSE,FALSE,RENT-107,TRUE,ZIG,,,,Exempt residential accommodation
+S-008,2025-01-17,sale,POS cash sales,Walk-in customers,standard,3500.00,FALSE,0,0,,100,,FALSE,FALSE,INV-108,TRUE,ZIG,,,,Standard sale
+S-009,2025-01-20,sale,Hardware sales,Retail,standard,6000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-109,TRUE,ZIG,,,,Standard sale
+S-010,2025-01-25,sale,Approved credit sales (standard),Trade customer,standard,4000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-110,TRUE,ZIG,,,,Standard sale
+ADJ-001,2025-01-22,adjustment,Credit note - goods returned (original standard sale),Customer,standard,1200.00,FALSE,0,0,,100,credit_note,FALSE,FALSE,INV-101,TRUE,ZIG,,,,Reduces output VAT
+ADJ-002,2025-01-23,adjustment,Debit note - price adjustment on invoiced supply,Customer,standard,800.00,FALSE,0,0,,100,debit_note,FALSE,FALSE,INV-109,TRUE,ZIG,,,,Increases output VAT
+ADJ-003,2025-01-31,adjustment,Bad debt written off (>6 months; efforts documented),Debtor,standard,1000.00,FALSE,0,0,,100,bad_debt_relief,FALSE,FALSE,INV-102,TRUE,ZIG,,,,Reduces output VAT
+P-001,2025-01-03,purchase,Packaging materials,Supplier A,standard,900.00,FALSE,0,0,,100,,FALSE,FALSE,SP-201,TRUE,ZIG,,,,Supplies for sales
+P-002,2025-01-06,purchase,Trading stock,Supplier B,standard,5000.00,FALSE,0,0,,100,,FALSE,FALSE,SP-202,TRUE,ZIG,,,,Stock purchased
+P-003,2025-01-13,purchase,Utilities - ZESA,City Council,standard,700.00,FALSE,0,0,,100,,FALSE,FALSE,SP-203,TRUE,ZIG,,,,Power for shop
+P-004,2025-01-19,purchase,Admin overheads (mixed-use),Various,standard,1200.00,FALSE,0,0,,100,,TRUE,FALSE,SP-204,TRUE,ZIG,,,,Mixed overhead - recovery
+P-005,2025-01-27,purchase,Office rent,Landlord,standard,1500.00,FALSE,0,0,,100,,FALSE,FALSE,SP-205,TRUE,ZIG,,,,Business premises rent
+P-006,2025-01-30,purchase,Vehicle repairs,Workshop,standard,600.00,FALSE,0,0,,100,,FALSE,FALSE,SP-206,TRUE,ZIG,,,,Delivery vehicle repairs
+IMP-G-001,2025-01-14,import_goods,Imported equipment (customs cleared),Overseas supplier,standard,0,FALSE,2500.00,200.00,,100,,FALSE,TRUE,BL-901,TRUE,USD,,,,Import VAT on CV + duty
+IMP-S-001,2025-01-28,imported_service,Cloud platform subscription (non-resident),SaaS (US),standard,900.00,FALSE,0,0,,100,,FALSE,FALSE,LC-902,TRUE,USD,,,,Reverse charge imported service
+"""
+
 SAMPLE_FILES = {
+    "Harare Traders (21 transactions)": HARARE_CSV,
     "Amber Mart (ZiG worked example)": AMBER_MART_CSV,
     "Veritas Wholesale (USD only)": VERITAS_CSV,
     "Tri-Currency Traders (mixed USD+ZiG+ZAR)": TRI_CSV,
     "QA — dataset with errors (PASS/FAIL demo)": QA_CSV,
 }
 
+# Display file names used by the Data Input page
+SAMPLE_NAMES = {
+    "Harare Traders (21 transactions)": "harare_traders.csv",
+    "Amber Mart (ZiG worked example)": "amber_mart.csv",
+    "Veritas Wholesale (USD only)": "veritas_wholesale.csv",
+    "Tri-Currency Traders (mixed USD+ZiG+ZAR)": "mixed_supplies.csv",
+    "QA — dataset with errors (PASS/FAIL demo)": "qa_errors.csv",
+}
+
 SAMPLE_DESCRIPTIONS = {
+    "Harare Traders (21 transactions)": ("A clean everyday trader dataset: "
+        "standard, zero-rated and exempt sales, credit/debit notes, bad-debt "
+        "relief, imports, a reverse-charge service and a mixed overhead."),
     "Amber Mart (ZiG worked example)": ("Single-currency ZiG dataset. Produces the "
         "13-line VAT 7 schedule matching the worked example in the brief "
         "(sales 34 250, output tax 3 642.50, adjustments -180, net 792.50)."),

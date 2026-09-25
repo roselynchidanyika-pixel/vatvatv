@@ -16,7 +16,10 @@ import streamlit as st
 def _smtp_config():
     """Read SMTP config from Streamlit secrets, then environment variables.
     Locally this may also be an .env exported by the user (never committed)."""
-    s = st.secrets.get("smtp", {}) or {}
+    try:
+        s = st.secrets.get("smtp", {}) or {}
+    except Exception:
+        s = {}
     cfg = {
         "host": s.get("host") or os.environ.get("SMTP_HOST", ""),
         "port": int(s.get("port") or os.environ.get("SMTP_PORT", 465)),

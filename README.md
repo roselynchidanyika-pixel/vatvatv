@@ -6,6 +6,16 @@ into a **fully explained, auditable, ZIMRA-style VAT 7 return** — with
 storytelling, validation, a manual entry tablet, management reporting and
 email/WhatsApp sharing.
 
+The app is organised as **five simple pages**:
+
+| Page | What you do there |
+|---|---|
+| 🏠 **Data Input** | Pick a demo dataset, upload CSV/Excel, or enter transactions manually |
+| 📊 **Return Summary** | Detailed schedules, **All Workings** (every calculation, step by step), graphs, management report |
+| 🔍 **Audit Trail** | The complete calculation/audit trail for every transaction |
+| 🧪 **Test Cases** | Run the engine test suite in the app (TC01–TC21) |
+| 📚 **Assumptions & Law** | VAT explainer, quiz, legal assumptions and official sources |
+
 > [EDUCATIONAL / DEMONSTRATION SYSTEM ONLY — error messages are simulated
 > fixtures used to demonstrate, validate and prove the VAT engine. No real
 > taxpayer data is required, expected or used.]
@@ -19,15 +29,15 @@ email/WhatsApp sharing.
 1. **LEARN** — an embedded VAT module explains output/input VAT, zero-rated vs
    exempt supplies, reverse charge, imports and taxation in simple English, and
    a 10-question quiz tests the user.
-2. **ENTER** — three ways to get data in: demo datasets (4), CSV/Excel upload
-   (column aliases accepted), or a **manual transaction tablet** with a friendly
-   per-row entry form.
+2. **ENTER** — three ways to get data in: demo datasets (5, incl. the 21-row
+   “Harare Traders” sample), CSV/Excel upload (column aliases accepted), or a
+   **manual transaction tablet** with a friendly per-row entry form.
 3. **CHECK** — every transaction is validated (PASS / REVIEW / FAIL) with the
    reason, the impact on VAT, and how to fix it.
 4. **CONVERT** — foreign currencies are converted at the **live** rate (ZWG/USD
-   via open.er-api.com shadowing the RBZ official rate), with a manual RBZ
-   override and — crucially — the rate, source and date shown on **every**
-   affected audit row.
+   via open.er-api.com shadowing the RBZ official rate). The sidebar includes a
+   **currency converter** and — crucially — the rate, source and date are shown
+   on **every** affected audit row.
 5. **CALCULATE** — a fully segregated, 13-line VAT 7 schedule is computed for
    **each currency used** (ZiG and USD schedules are never mixed, per ZIMRA).
    ZAR transactions are converted into the USD schedule.
@@ -51,7 +61,8 @@ email/WhatsApp sharing.
 - The feed is cached (6h) in `.fx_rates_cache.json`, refreshed at most every
   6 hours, hard-capped at 8 s worst case, and can be forced offline with the
   `FX_DISABLE_NETWORK=1` environment variable (used by the test suite).
-- A **manual official RBZ ZiG rate** field overrides the live ZiG/USD feed.
+- The sidebar shows the live rates and a **currency converter** (convert any
+  amount between ZiG, USD and ZAR).
 - **If a rate cannot be obtained the affected transactions FAIL explicitly** —
   the engine never applies a silent or assumed rate.
 
@@ -66,7 +77,7 @@ email/WhatsApp sharing.
 | `graphs.py` | Plotly charts, each with a “what / why / Grade-7” explanation. |
 | `report_generator.py` | Professional Markdown report + share text. |
 | `share.py` | SMTP email (Streamlit secrets `[smtp]`) + WhatsApp `wa.me` link. |
-| `sample_data.py` | 4 fictional datasets (incl. the worked example and deliberately broken one). |
+| `sample_data.py` | 5 fictional datasets (incl. the worked example, the multi-currency traders and a deliberately broken one). |
 | `test_suite.py` | TC01–TC21 shared by pytest **and** the in-app “Test Cases” page. |
 | `app.py` | The Streamlit front end. |
 
