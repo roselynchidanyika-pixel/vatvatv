@@ -1,0 +1,9 @@
+txn_id,date,direction,description,counterparty,category,amount,vat_inclusive,customs_value,customs_duty,prohibited_reason,business_use_pct,adjustment_type,mixed_input,import_flag,invoice_number,supporting_document_available,currency,exchange_rate,exchange_rate_date,exchange_rate_source,notes
+S-Q1,2026-05-03,sale,Valid standard sale,Test customer,standard,5000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-4001,TRUE,ZIG,,,,Valid row
+S-Q2,2026-05-04,sale,Amount is not numeric,Test customer,standard,abc,FALSE,0,0,,100,,FALSE,FALSE,,TRUE,ZIG,,,,FAIL: non-numeric amount
+S-Q3,2026-05-05,sale,Missing transaction ID,Test customer,standard,3000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-4003,TRUE,ZIG,,,,FAIL: missing ID
+S-Q1,2026-05-06,sale,Duplicate ID with S-Q1,Test customer,standard,800.00,FALSE,0,0,,100,,FALSE,FALSE,INV-4004,TRUE,ZIG,,,,FAIL: duplicate ID
+S-Q5,2026-05-07,sale,Unsupported currency (EUR),Test customer,standard,2500.00,FALSE,0,0,,100,,FALSE,FALSE,INV-4005,TRUE,EUR,,,,FAIL: currency not supported
+IMP-Q1,2026-05-08,import_goods,Import with no customs value,Overseas,standard,0,FALSE,0,0,,100,,FALSE,TRUE,BL-401,TRUE,USD,,,,FAIL: missing import info
+S-Q7,2026-05-09,sale,Zero-rated export without proof of export,Foreign buyer,export,6000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-4007,FALSE,ZIG,,,,REVIEW: export proof missing
+P-Q8,2026-05-10,purchase,Purchase without tax invoice,Supplier,standard,1500.00,FALSE,0,0,,100,,FALSE,FALSE,SP-402,FALSE,ZIG,,,,REVIEW: input claim may be disallowed

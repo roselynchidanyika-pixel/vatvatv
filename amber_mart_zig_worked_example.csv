@@ -1,0 +1,12 @@
+txn_id,date,direction,description,counterparty,category,amount,vat_inclusive,customs_value,customs_duty,prohibited_reason,business_use_pct,adjustment_type,mixed_input,import_flag,invoice_number,supporting_document_available,currency,exchange_rate,exchange_rate_date,exchange_rate_source,notes
+S-A1,2026-05-06,sale,Retail sales - groceries,Walk-in customers,standard,23500.00,FALSE,0,0,,100,,FALSE,FALSE,INV-1001,TRUE,ZIG,,,,Standard-rated retail sales
+S-A2,2026-05-09,sale,Sale of mealie meal (zero-rated foodstuff),Wholesale buyers,zero_rated,10000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-1002,TRUE,ZIG,,,,Zero-rated basic foodstuff
+S-A3,2026-05-15,sale,Residential rent - Avondale flats,Tenant,exempt,750.00,FALSE,0,0,,100,,FALSE,FALSE,R-101,TRUE,ZIG,,,,Exempt residential accommodation
+ADJ-A1,2026-05-22,adjustment,Credit note - returned goods (original invoice VAT-inclusive),Customer,standard,1341.29,TRUE,0,0,,100,credit_note,FALSE,FALSE,INV-1001,TRUE,ZIG,,,,Reduces output VAT by 180.00
+IMP-S-A1,2026-05-25,imported_service,Cloud accounting subscription (non-resident),CloudCo (UK),standard,1935.48,FALSE,0,0,,100,,FALSE,FALSE,C-202,TRUE,ZIG,,,,Reverse charge on imported service
+P-A1,2026-05-03,purchase,Purchase of trading stock (direct),Supplier A,standard,7000.00,FALSE,0,0,,100,,FALSE,FALSE,SP-501,TRUE,ZIG,,,,Directly-attributable stock
+P-A2,2026-05-05,purchase,Commercial office rent,Landlord,standard,1000.00,FALSE,0,0,,100,,FALSE,FALSE,SP-502,TRUE,ZIG,,,,Rent for business premises
+P-A3,2026-05-08,purchase,Electricity - ZESA,ZESA,standard,500.00,FALSE,0,0,,100,,FALSE,FALSE,SP-503,TRUE,ZIG,,,,Power for shop and office
+P-A4,2026-05-10,purchase,Packaging materials,Supplier B,standard,1467.74,FALSE,0,0,,100,,FALSE,FALSE,SP-504,TRUE,ZIG,,,,Packaging for retail goods
+P-A5,2026-05-12,purchase,Admin overheads (mixed-use - apportionment),Various,standard,1935.48,FALSE,0,0,,100,,TRUE,FALSE,SP-505,TRUE,ZIG,,,,Mixed overhead - de minimis recovery
+IMP-G-A1,2026-05-18,import_goods,Machinery parts - import (CD3),Overseas supplier,standard,0,FALSE,5000.00,322.58,,100,,FALSE,TRUE,BL-607,TRUE,ZIG,,,,Import VAT on customs value + duty

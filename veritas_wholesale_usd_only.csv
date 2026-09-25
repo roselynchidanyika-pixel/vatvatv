@@ -1,0 +1,12 @@
+txn_id,date,direction,description,counterparty,category,amount,vat_inclusive,customs_value,customs_duty,prohibited_reason,business_use_pct,adjustment_type,mixed_input,import_flag,invoice_number,supporting_document_available,currency,exchange_rate,exchange_rate_date,exchange_rate_source,notes
+S-V1,2026-05-07,sale,Wholesale sales of hardware,Retailers,standard,45000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-2001,TRUE,USD,,,,Standard-rated wholesale sales
+S-V2,2026-05-11,sale,Exported hardware to Botswana (bill of entry held),Gaborone Ltd (BW),export,12000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-2002,TRUE,USD,,,,Zero-rated export with proof
+ADJ-V1,2026-05-20,adjustment,Credit note - price reduction,Retailer,standard,2000.00,FALSE,0,0,,100,credit_note,FALSE,FALSE,INV-2001,TRUE,USD,,,,Reduces output VAT by 310.00
+ADJ-V2,2026-05-23,adjustment,Debit note - additional charge on supply,Retailer,standard,1000.00,FALSE,0,0,,100,debit_note,FALSE,FALSE,INV-2003,TRUE,USD,,,,Increases output VAT by 155.00
+IMP-S-V1,2026-05-26,imported_service,Software licence from non-resident,SaaS Ltd (US),standard,3000.00,FALSE,0,0,,100,,FALSE,FALSE,LC-210,TRUE,USD,,,,Reverse charge imported service
+P-V1,2026-05-02,purchase,Trading stock - hardware lines,Shenzhen Trading,standard,20000.00,FALSE,0,0,,100,,FALSE,FALSE,SP-701,TRUE,USD,,,,Stock purchases
+P-V2,2026-05-04,purchase,Warehouse rent,ProProp,standard,2500.00,FALSE,0,0,,100,,FALSE,FALSE,SP-702,TRUE,USD,,,,Warehouse rental
+P-V3,2026-05-06,purchase,Local transport and freight,FreightCo,standard,1200.00,FALSE,0,0,,100,,FALSE,FALSE,SP-703,TRUE,USD,,,,Distribution costs
+P-V4,2026-05-09,purchase,Utilities (mixed head-office overhead),City Council,standard,1500.00,FALSE,0,0,,100,,TRUE,FALSE,SP-704,TRUE,USD,,,,Mixed overhead - full recovery (no exempt supplies)
+P-V5,2026-05-14,purchase,Client entertainment - restaurant,Restaurant,standard,800.00,FALSE,0,0,entertainment,100,,FALSE,FALSE,SP-705,TRUE,USD,,,,Prohibited input - no claim
+IMP-G-V1,2026-05-17,import_goods,Imported stock from supplier (CD3),Overseas supplier,standard,0,FALSE,8000.00,750.00,,100,,FALSE,TRUE,BL-708,TRUE,USD,,,,Import VAT on customs value + duty

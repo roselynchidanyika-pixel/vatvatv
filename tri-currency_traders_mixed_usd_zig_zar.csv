@@ -1,0 +1,12 @@
+txn_id,date,direction,description,counterparty,category,amount,vat_inclusive,customs_value,customs_duty,prohibited_reason,business_use_pct,adjustment_type,mixed_input,import_flag,invoice_number,supporting_document_available,currency,exchange_rate,exchange_rate_date,exchange_rate_source,notes
+S-T1,2026-05-05,sale,Contract sales (USD),Customers,standard,60000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-3001,TRUE,USD,,,,USD-standard sales
+S-T2,2026-05-08,sale,Export sales to regional markets,Regional buyer,export,20000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-3002,TRUE,USD,,,,Zero-rated USD export
+S-T2Z,2026-05-10,sale,Consulting fees invoiced in ZAR,Botswana client (ZAR),standard,20000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-3003,TRUE,ZAR,,,,Converted to USD on the USD schedule
+P-T1,2026-05-02,purchase,Trading stock (USD),Supplier,standard,30000.00,FALSE,0,0,,100,,FALSE,FALSE,SP-801,TRUE,USD,,,,USD stock
+P-T2Z,2026-05-06,purchase,Packaging purchased in ZAR,ZA packaging,standard,10000.00,FALSE,0,0,,100,,FALSE,FALSE,SP-802,TRUE,ZAR,,,,Converted to USD on the USD schedule
+IMP-G-T1,2026-05-14,import_goods,"Imported equipment (USD, CD3)",Overseas,standard,0,FALSE,10000.00,500.00,,100,,FALSE,TRUE,BL-803,TRUE,USD,,,,Import VAT on AV + duty
+ADJ-T1,2026-05-21,adjustment,Credit note - sales return (USD),Customer,standard,4000.00,FALSE,0,0,,100,credit_note,FALSE,FALSE,INV-3001,TRUE,USD,,,,Reduces USD output tax
+IMP-S-T1,2026-05-24,imported_service,"Marketing platform (non-resident, USD)",AdTech (US),standard,5000.00,FALSE,0,0,,100,,FALSE,FALSE,LC-804,TRUE,USD,,,,Reverse charge
+S-T3,2026-05-03,sale,Local cash sales (ZiG),Walk-in customers,standard,15000.00,FALSE,0,0,,100,,FALSE,FALSE,INV-3005,TRUE,ZIG,,,,ZiG-standard sales
+S-T4,2026-05-16,sale,Residential rent (ZiG),Tenants,exempt,1000.00,FALSE,0,0,,100,,FALSE,FALSE,RT-101,TRUE,ZIG,,,,Exempt - ZiG schedule
+P-T3,2026-05-11,purchase,Electricity - ZESA (ZiG),ZESA,standard,2000.00,FALSE,0,0,,100,,FALSE,FALSE,SP-805,TRUE,ZIG,,,,ZiG purchases
